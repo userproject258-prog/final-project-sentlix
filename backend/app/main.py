@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from app.database import get_session, init_db
-from app.models.core import SystemStats, ThreatEvent
+from app.models.core import SystemStats, ThreatEvent, AuditFinding
 import contextlib
 import json
 import asyncio
@@ -11,18 +11,27 @@ from typing import List
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self.tokens: dict[WebSocket, str] = {}
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, token: str):
+        await websocket.accept(subprotocol="bearer")
         self.active_connections.append(websocket)
+        self.tokens[websocket] = token
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+        self.tokens.pop(websocket, None)
 
     async def broadcast(self, message: dict):
         for connection in list(self.active_connections):
             try:
+                with Session(engine) as session:
+                    user = authenticated_user(self.tokens.get(connection, ""), session)
+                if user is None:
+                    await connection.close(code=1008)
+                    self.disconnect(connection)
+                    continue
                 await connection.send_text(json.dumps(message))
             except Exception:
                 self.disconnect(connection)
@@ -37,23 +46,72 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SentinelX API", lifespan=lifespan)
 
-# Configure CORS so the Next.js frontend (local or deployed) can communicate with FastAPI
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 import hashlib
 import secrets
-from app.models.core import User
+import hmac
+import os
+from datetime import datetime, timezone, timedelta
+from fastapi.responses import JSONResponse
+from app.models.core import User, AuthSession
+from app.database import engine
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 600_000).hex()
+    return f"pbkdf2_sha256$600000${salt}${digest}"
 
-from pydantic import BaseModel, EmailStr
+def verify_password(password: str, stored: str) -> bool:
+    if not stored.startswith("pbkdf2_sha256$"):
+        return hmac.compare_digest(hashlib.sha256(password.encode()).hexdigest(), stored)
+    try:
+        _, iterations, salt, expected = stored.split("$", 3)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(iterations)).hex()
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
+
+def create_auth_session(session: Session, user_id: int) -> str:
+    token = secrets.token_hex(32)
+    session.add(AuthSession(token_hash=hashlib.sha256(token.encode()).hexdigest(), user_id=user_id,
+                            expires_at=datetime.now(timezone.utc) + timedelta(hours=12)))
+    session.commit()
+    return token
+
+def authenticated_user(token: str, session: Session) -> User | None:
+    record = session.get(AuthSession, hashlib.sha256(token.encode()).hexdigest())
+    if record is None:
+        return None
+    expiry = record.expires_at.replace(tzinfo=timezone.utc) if record.expires_at.tzinfo is None else record.expires_at
+    if expiry <= datetime.now(timezone.utc):
+        return None
+    return session.get(User, record.user_id)
+
+@app.middleware("http")
+async def require_authentication(request, call_next):
+    if (not request.url.path.startswith("/api/") or request.method == "OPTIONS" or
+            request.url.path in {"/api/auth/login", "/api/auth/register"}):
+        return await call_next(request)
+    if request.url.path == "/api/devsecops/webhook" and request.method == "POST":
+        secret = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+        signature = request.headers.get("x-hub-signature-256", "")
+        if secret and signature.startswith("sha256="):
+            expected = "sha256=" + hmac.new(secret.encode(), await request.body(), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, signature):
+                return await call_next(request)
+    header = request.headers.get("authorization", "")
+    scheme, _, token = header.partition(" ")
+    with Session(engine) as session:
+        user = authenticated_user(token, session) if scheme.lower() == "bearer" and token else None
+        if user is None:
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        request.state.user_id = user.id
+    return await call_next(request)
+
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+                   allow_methods=["*"], allow_headers=["*"])
+
+from pydantic import BaseModel, EmailStr, Field
+from typing import Literal
 from fastapi import HTTPException, status
 
 class RegisterRequest(BaseModel):
@@ -75,6 +133,8 @@ async def register(req: RegisterRequest, session: Session = Depends(get_session)
     existing = session.exec(select(User).where(User.email == clean_email)).first()
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email already exists")
+    if session.exec(select(User.id).limit(1)).first() is not None:
+        raise HTTPException(status_code=403, detail="Self-registration is closed after the first account is created")
     
     new_user = User(
         name=req.name.strip() or "Security Analyst",
@@ -86,7 +146,7 @@ async def register(req: RegisterRequest, session: Session = Depends(get_session)
     session.refresh(new_user)
     
     # Return auth token and user profile
-    token = secrets.token_hex(24)
+    token = create_auth_session(session, new_user.id)
     return {
         "status": "success",
         "message": "Account created successfully",
@@ -101,13 +161,14 @@ async def register(req: RegisterRequest, session: Session = Depends(get_session)
 @app.post("/api/auth/login")
 async def login(req: LoginRequest, session: Session = Depends(get_session)):
     clean_email = req.email.strip().lower()
-    hashed = hash_password(req.password)
-    
-    user = session.exec(select(User).where(User.email == clean_email, User.hashed_password == hashed)).first()
-    if not user:
+    user = session.exec(select(User).where(User.email == clean_email)).first()
+    if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    token = secrets.token_hex(24)
+    if not user.hashed_password.startswith("pbkdf2_sha256$"):
+        user.hashed_password = hash_password(req.password)
+        session.add(user)
+        session.commit()
+    token = create_auth_session(session, user.id)
     return {
         "status": "success",
         "message": "Login successful",
@@ -127,11 +188,31 @@ async def get_all_users(session: Session = Depends(get_session)):
         "users": [{"id": u.id, "email": u.email, "name": u.name, "created_at": str(u.created_at)} for u in users]
     }
 
+@app.get("/api/auth/me")
+async def current_user(request: Request, session: Session = Depends(get_session)):
+    user = session.get(User, request.state.user_id)
+    return {"id": user.id, "name": user.name, "email": user.email}
+
+@app.post("/api/auth/logout")
+async def logout(request: Request, session: Session = Depends(get_session)):
+    token = request.headers.get("authorization", "").partition(" ")[2]
+    record = session.get(AuthSession, hashlib.sha256(token.encode()).hexdigest())
+    if record:
+        session.delete(record)
+        session.commit()
+    return {"status": "success"}
+
 
 
 @app.websocket("/ws/live")
 async def websocket_live_endpoint(websocket: WebSocket):
-    await ws_manager.connect(websocket)
+    protocols = websocket.scope.get("subprotocols", [])
+    with Session(engine) as session:
+        user = authenticated_user(protocols[1], session) if len(protocols) == 2 and protocols[0] == "bearer" else None
+    if user is None:
+        await websocket.close(code=1008)
+        return
+    await ws_manager.connect(websocket, protocols[1])
     try:
         # Initial greeting and ping loop
         await websocket.send_text(json.dumps({
@@ -175,8 +256,8 @@ async def get_overview(session: Session = Depends(get_session)):
     
     # Calculate real-time counts from DB
     type_counts: dict[str, int] = {}
-    total_threats = len(all_events) if len(all_events) > 0 else stats.threats
-    critical_count = sum(1 for e in all_events if e.severity == "CRITICAL") if len(all_events) > 0 else stats.critical
+    total_threats = len(all_events)
+    critical_count = sum(1 for e in all_events if e.severity.upper() == "CRITICAL")
 
     for evt in all_events:
         t = evt.type or "Anomaly"
@@ -186,29 +267,26 @@ async def get_overview(session: Session = Depends(get_session)):
     if type_counts:
         threat_distribution = [{"label": k, "count": v} for k, v in type_counts.items()]
     else:
-        threat_distribution = [
-            {"label": "Brute Force", "count": 2},
-            {"label": "Port Scan", "count": 1},
-            {"label": "Anomaly", "count": 1},
-        ]
+        threat_distribution = []
 
     # Calculate real risk score based on active critical/high threats and cloud score
-    base_risk = 30 + (critical_count * 10) + min(40, len(all_events) * 2)
-    calculated_risk_score = min(95, max(15, base_risk))
+    risk = calculate_recorded_risk(session)
+    calculated_risk_score = risk["overall_risk"]
 
     # Generate dynamic 7-day risk trend ending at today's score
-    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    risk_trend = [
-        {"date": day, "score": max(20, min(100, calculated_risk_score - (len(days) - 1 - i) * 2 + (i % 3) * 2))}
-        for i, day in enumerate(days)
-    ]
+    # Daily recorded threat weight, not a historical overall risk score.
+    risk_trend = []
+    for i in range(6, -1, -1):
+        day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
+        score = min(100, sum(_severity_weight(e.severity) for e in all_events if e.time.date() == day))
+        risk_trend.append({"date": day.isoformat(), "score": score})
 
     return {
         "stats": {
             "threats": total_threats,
             "critical": critical_count,
             "risk_score": calculated_risk_score,
-            "cloud_security_score": stats.cloud_security_score,
+            "cloud_security_score": max(0, 100 - risk["breakdown"]["cloud_risk"] * 2),
         },
         "trends": {
             "threats": {"direction": stats.threats_trend, "value": stats.threats_trend_value},
@@ -257,7 +335,7 @@ async def get_threats(session: Session = Depends(get_session)):
             "destination": evt.destination if hasattr(evt, 'destination') else "Unknown",
             "severity": evt.severity,
             "status": evt.status,
-            "confidence": getattr(evt, 'confidence', 95.0) # Mock confidence if missing
+            "confidence": getattr(evt, 'confidence', None)
         }
         for evt in events
     ]
@@ -282,6 +360,13 @@ async def analyze_threat(event: NetworkEvent, session: Session = Depends(get_ses
     # In a real system, we might only log if severity > LOW. For demo, we log all.
     if analysis["severity"] != "LOW":
         session.add(new_event)
+        session.add(Alert(
+            id=f"ALT-{uuid.uuid4().hex[:8]}",
+            title=f"{new_event.type} detected",
+            severity=new_event.severity,
+            source=new_event.source,
+            message=f"Threat event {new_event.id} was detected from {new_event.source}.",
+        ))
         
         # Update system stats
         stats = session.exec(select(SystemStats)).first()
@@ -442,7 +527,7 @@ async def apply_cspm_remediation(req: RemediationRequest, session: Session = Dep
         })
     return result
 
-from app.models.core import PipelineRun, Alert
+from app.models.core import PipelineRun, PipelineScanDetail, Alert
 from app.devsecops.service import simulate_pipeline_run, seed_initial_runs
 from app.monitoring.service import get_and_generate_latest_metrics, seed_historical_metrics
 import uuid
@@ -513,14 +598,19 @@ async def get_health():
         "status": "Healthy"
     }
 
+class AssistantMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
 class AssistantQuery(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1, max_length=4000)
+    history: list[AssistantMessage] = Field(default_factory=list, max_length=8)
 
 from app.assistant.service import query_assistant
 
 @app.post("/api/assistant/query")
 async def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
-    result = query_assistant(query.prompt, session=session)
+    result = query_assistant(query.prompt, session=session, history=[message.model_dump() for message in query.history])
     return result
 
 @app.get("/api/assistant/status")
@@ -529,8 +619,7 @@ async def assistant_status():
     k = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY") or "").strip()
     return {
         "gemini_api_key_configured": bool(k),
-        "key_length": len(k) if k else 0,
-        "key_prefix": k[:6] + "..." if len(k) >= 6 else None
+        "key_length": len(k) if k else 0
     }
 
 
@@ -546,14 +635,20 @@ async def get_resources():
     }
 
 @app.get("/api/reports")
-async def get_reports():
-    return {
-        "reports": [
-            {"id": "rep-001", "name": "Monthly Executive Summary", "date": "2026-09-01", "type": "Summary"},
-            {"id": "rep-002", "name": "PCI-DSS Compliance Audit", "date": "2026-08-15", "type": "Compliance"},
-            {"id": "rep-003", "name": "Q3 Infrastructure Risk", "date": "2026-07-01", "type": "Risk"},
-        ]
-    }
+async def get_reports(session: Session = Depends(get_session)):
+    from app.models.core import AuditReport
+    reports = session.exec(select(AuditReport).order_by(AuditReport.time.desc())).all()
+    return {"reports": [{"id": r.id, "name": f"Security audit: {r.target}",
+                         "date": r.time.isoformat(), "type": f"{r.completed_stages} stages"}
+                        for r in reports]}
+
+@app.get("/api/reports/{report_id}")
+async def get_report(report_id: str, session: Session = Depends(get_session)):
+    from app.models.core import AuditReport
+    report = session.get(AuditReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"id": report.id, "target": report.target, "content": report.content}
 
 @app.get("/api/audit-logs")
 async def get_audit_logs():
@@ -585,6 +680,8 @@ async def get_alerts(session: Session = Depends(get_session)):
 @app.post("/api/alerts/resolve/{alert_id}")
 async def resolve_alert(alert_id: str, session: Session = Depends(get_session)):
     alert = session.get(Alert, alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
     if alert:
         alert.status = "Resolved"
         session.add(alert)
@@ -596,43 +693,65 @@ async def resolve_alert(alert_id: str, session: Session = Depends(get_session)):
     return {"status": "success"}
 
 @app.get("/api/risk")
-async def get_risk():
-    return {
-        "overall_risk": 74,
-        "breakdown": {
-            "threat_risk": 32,
-            "cloud_risk": 24,
-            "iam_risk": 9,
-            "infra_risk": 14
-        },
-        "top_assets": [
-            {"name": "production-api", "score": 91},
-            {"name": "production-db", "score": 76},
-            {"name": "public-assets", "score": 73}
-        ]
-    }
+async def get_risk(session: Session = Depends(get_session)):
+    return calculate_recorded_risk(session)
+
+def _severity_weight(severity: str) -> int:
+    return {"CRITICAL": 20, "HIGH": 10, "MEDIUM": 5, "LOW": 1}.get(severity.upper(), 0)
+
+def calculate_recorded_risk(session: Session) -> dict:
+    threats = [e for e in session.exec(select(ThreatEvent)).all()
+               if e.status.lower() not in {"resolved", "closed"}]
+    findings = [f for f in session.exec(select(CSPMFinding)).all()
+                if f.status.lower() not in {"resolved", "closed"}]
+    audit_findings = [f for f in session.exec(select(AuditFinding).order_by(AuditFinding.time.desc())).all()
+                      if f.status.lower() not in {"resolved", "closed"}]
+    # Repeated scans of the same observation should not increase the score.
+    unique_audit = {(f.target, f.title): f for f in reversed(audit_findings)}
+    threat_risk = min(50, sum(_severity_weight(e.severity) for e in threats))
+    cloud_risk = min(50, sum(_severity_weight(f.severity) for f in findings))
+    audit_risk = min(50, sum(_severity_weight(f.severity) for f in unique_audit.values()))
+    assets = {}
+    for finding in findings:
+        assets[finding.resource] = min(100, assets.get(finding.resource, 0) + _severity_weight(finding.severity))
+    for finding in unique_audit.values():
+        assets[finding.target] = min(100, assets.get(finding.target, 0) + _severity_weight(finding.severity))
+    return {"overall_risk": min(100, threat_risk + cloud_risk + audit_risk),
+            "breakdown": {"threat_risk": threat_risk, "cloud_risk": cloud_risk,
+                          "audit_risk": audit_risk, "iam_risk": 0, "infra_risk": 0},
+            "top_assets": [{"name": name, "score": score} for name, score in
+                           sorted(assets.items(), key=lambda item: item[1], reverse=True)[:10]]}
 
 @app.get("/api/analytics")
-async def get_analytics():
-    # Generate mock historical trend data
+async def get_analytics(session: Session = Depends(get_session)):
     now = datetime.now(timezone.utc)
-    trend = []
-    for i in range(30, 0, -1):
-        t = now - timedelta(days=i)
-        trend.append({
-            "date": t.strftime("%Y-%m-%d"),
-            "critical": random.randint(0, 5),
-            "high": random.randint(2, 10),
-            "medium": random.randint(5, 20)
-        })
+    trend = [{"date": (now - timedelta(days=i)).date().isoformat(),
+              "critical": 0, "high": 0, "medium": 0, "low": 0}
+             for i in range(29, -1, -1)]
+    by_date = {row["date"]: row for row in trend}
+    totals = {name: 0 for name in ("Critical", "High", "Medium", "Low")}
+    for event in session.exec(select(ThreatEvent)).all():
+        severity = event.severity.strip().title()
+        if severity in totals:
+            totals[severity] += 1
+            day = event.time.date().isoformat()
+            if day in by_date:
+                by_date[day][severity.lower()] += 1
+    audit_totals = {name: 0 for name in totals}
+    audit_findings = session.exec(select(AuditFinding).order_by(AuditFinding.time.desc())).all()
+    for finding in audit_findings:
+        severity = finding.severity.strip().title()
+        if severity in audit_totals:
+            audit_totals[severity] += 1
     return {
         "trend": trend,
-        "severity_distribution": [
-            {"name": "Critical", "value": 12},
-            {"name": "High", "value": 35},
-            {"name": "Medium", "value": 89},
-            {"name": "Low", "value": 124}
-        ]
+        "severity_distribution": [{"name": name, "value": count} for name, count in totals.items()],
+        "audit_distribution": [{"name": name, "value": count} for name, count in audit_totals.items()],
+        "audit_summary": {"total": len(audit_findings),
+                          "open": sum(1 for finding in audit_findings if finding.status.lower() == "open"),
+                          "resolved": sum(1 for finding in audit_findings if finding.status.lower() == "resolved"),
+                          "recent": [{"id": f.id, "target": f.target, "title": f.title, "severity": f.severity,
+                                      "status": f.status, "time": f.time.isoformat()} for f in audit_findings[:10]]}
     }
 
 @app.get("/api/monitoring/health")
@@ -660,7 +779,8 @@ async def get_pipeline_runs(session: Session = Depends(get_session)):
                 "sast_status": r.sast_status,
                 "secret_status": r.secret_status,
                 "dependency_status": r.dependency_status,
-                "container_status": r.container_status
+                "container_status": r.container_status,
+                "details": json.loads(detail.details_json) if (detail := session.get(PipelineScanDetail, r.id)) else None
             }
             for r in runs
         ]
@@ -714,7 +834,10 @@ async def trigger_pipeline_webhook(request: Request):
     return {
         "status": "success", 
         "run": result["run"], 
-        "sast_details": result["sast_details"]
+        "sast_details": result["sast_details"],
+        "secret_details": result["secret_details"],
+        "dependency_details": result["dependency_details"],
+        "container_details": result["container_details"]
     }
 
 
@@ -740,6 +863,30 @@ class AuditLaunchRequest(BaseModel):
 async def devsecops_audit_status():
     return get_audit_status()
 
+@app.get("/api/devsecops/findings")
+async def get_audit_findings(session: Session = Depends(get_session)):
+    findings = session.exec(select(AuditFinding).order_by(AuditFinding.time.desc()).limit(100)).all()
+    return {"findings": findings}
+
+@app.post("/api/devsecops/findings/{finding_id}/resolve")
+async def resolve_audit_finding(finding_id: str, session: Session = Depends(get_session)):
+    finding = session.get(AuditFinding, finding_id)
+    if finding is None:
+        raise HTTPException(status_code=404, detail="Audit finding not found")
+    related = session.exec(select(AuditFinding).where(
+        AuditFinding.target == finding.target, AuditFinding.title == finding.title
+    )).all()
+    for item in related:
+        item.status = "Resolved"
+        session.add(item)
+        alert = session.get(Alert, f"AUD-{item.id}")
+        if alert:
+            alert.status = "Resolved"
+            session.add(alert)
+    session.commit()
+    await ws_manager.broadcast({"type": "AUDIT_FINDING_RESOLVED", "finding_id": finding_id})
+    return {"status": "success", "resolved_observations": len(related)}
+
 @app.post("/api/devsecops/audit/start")
 async def devsecops_audit_start(req: AuditLaunchRequest):
     clean_target = req.target.strip()
@@ -748,16 +895,24 @@ async def devsecops_audit_start(req: AuditLaunchRequest):
     if not req.authorized:
         raise HTTPException(status_code=400, detail="Confirm that you are authorized to test this target before launching.")
     
-    status = start_audit_run(target=clean_target, mode=req.mode, provider=req.provider)
-    return status
+    try:
+        return start_audit_run(target=clean_target, mode=req.mode, provider=req.provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 @app.post("/api/devsecops/audit/next")
 async def devsecops_audit_next():
-    return next_guided_stage()
+    try:
+        return next_guided_stage()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 @app.post("/api/devsecops/audit/run-all")
 async def devsecops_audit_run_all():
-    return run_all_remaining()
+    try:
+        return run_all_remaining()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 @app.post("/api/devsecops/audit/stop")
 async def devsecops_audit_stop():

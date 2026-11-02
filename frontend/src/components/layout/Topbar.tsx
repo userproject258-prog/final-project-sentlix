@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { Bell, Search, User, LogOut } from "lucide-react";
+import { API_URL, apiFetch } from "@/lib/api";
 
 function subscribeUser(callback: () => void) {
   window.addEventListener("storage", callback);
@@ -31,7 +32,8 @@ export function Topbar() {
   const router = useRouter();
   const userName = useSyncExternalStore(subscribeUser, getStoredUserName, getServerUserName);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await apiFetch(`${API_URL}/api/auth/logout`, { method: "POST" }); } catch { /* Clear local session even if offline. */ }
     localStorage.removeItem("sentinelx_token");
     localStorage.removeItem("sentinelx_user");
     router.replace("/login");

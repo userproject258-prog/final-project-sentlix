@@ -2,14 +2,12 @@ import Link from "next/link";
 import {
   ShieldAlert,
   Activity,
-  AlertTriangle,
   Bell,
   BarChart2,
   Terminal,
   FileText,
   Settings,
-  Shield,
-  LogOut
+  Shield
 } from "lucide-react";
 
 export function Sidebar() {
@@ -46,7 +44,6 @@ export function Sidebar() {
           <div className="space-y-1">
             <NavItem href="/threats" icon={<ShieldAlert />} label="Threat Detection" />
             <NavItem href="/alerts" icon={<Bell />} label="Alert Center" />
-            <NavItem href="/risk" icon={<AlertTriangle />} label="Risk Center" />
             <NavItem href="/analytics" icon={<BarChart2 />} label="Analytics" />
             <NavItem href="/monitoring" icon={<Activity />} label="System Health" />
           </div>
@@ -72,11 +69,6 @@ export function Sidebar() {
           </div>
         </div>
 
-        <div className="pt-6 border-t border-border/10">
-          <div className="space-y-1">
-            <NavItem href="/login" icon={<LogOut className="text-red-500" />} label="Sign Out" />
-          </div>
-        </div>
       </nav>
     </aside>
   );

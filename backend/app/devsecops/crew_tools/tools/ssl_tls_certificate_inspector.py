@@ -1,4 +1,4 @@
-from crewai.tools import BaseTool
+from .base import BaseTool
 from pydantic import BaseModel, Field
 from typing import Type, Optional, List, Dict, Any
 from urllib.parse import urlparse
@@ -50,11 +50,11 @@ class SslTlsCertificateInspectorTool(BaseTool):
                 continue
         return None
 
-    def _inspect_live_socket(self, domain: str) -> Dict[str, Any]:
-        """Perform direct TLS socket handshake against port 443."""
+    def _inspect_live_socket(self, domain: str, port: int = 443) -> Dict[str, Any]:
+        """Perform a certificate-verifying TLS handshake."""
         ctx = ssl.create_default_context()
         try:
-            with socket.create_connection((domain, 443), timeout=6) as sock:
+            with socket.create_connection((domain, port), timeout=6) as sock:
                 with ctx.wrap_socket(sock, server_hostname=domain) as ssock:
                     cert = ssock.getpeercert()
                     cipher = ssock.cipher() # ('TLS_AES_256_GCM_SHA384', 'TLSv1.3', 256)
@@ -74,10 +74,10 @@ class SslTlsCertificateInspectorTool(BaseTool):
 
                     return {
                         "success": True,
-                        "tls_version": version or "TLSv1.3",
+                        "tls_version": version or "Unknown",
                         "cipher_name": cipher[0] if cipher else "Unknown",
                         "cipher_proto": cipher[1] if cipher else "Unknown",
-                        "cipher_bits": cipher[2] if cipher else 256,
+                        "cipher_bits": cipher[2] if cipher else 0,
                         "common_name": subj_dict.get("commonName", domain),
                         "organization": subj_dict.get("organizationName", "N/A"),
                         "issuer_cn": issuer_dict.get("commonName", "Unknown CA"),
@@ -91,11 +91,11 @@ class SslTlsCertificateInspectorTool(BaseTool):
                         "error": None,
                     }
         except ssl.SSLCertVerificationError as exc:
-            return {"success": False, "error": f"SSL Certificate Verification Failed: {exc.verify_message}"}
+            return {"success": False, "verification_error": True, "error": f"SSL Certificate Verification Failed: {exc.verify_message}"}
         except ssl.SSLError as exc:
             return {"success": False, "error": f"TLS Handshake Error: {str(exc)}"}
         except Exception as exc:
-            return {"success": False, "error": f"Connection Failed to port 443: {str(exc)}"}
+            return {"success": False, "error": f"Connection Failed to port {port}: {str(exc)}"}
 
     def _fetch_crtsh(self, domain: str) -> List[Dict[str, Any]]:
         """Fetch historical certificates from crt.sh with short timeout."""
@@ -124,7 +124,7 @@ class SslTlsCertificateInspectorTool(BaseTool):
             lines.append("")
             lines.append("| Security Parameter | Status | Severity | Diagnostic Context |")
             lines.append("|---|---|---|---|")
-            lines.append(f"| TLS Handshake | Failed | Critical | {tls.get('error', 'Could not establish secure HTTPS connection')} |")
+            lines.append(f"| TLS Handshake | Failed | Unknown | {tls.get('error', 'Could not establish secure HTTPS connection')} |")
             lines.append("")
             return "\n".join(lines)
 
@@ -140,7 +140,7 @@ class SslTlsCertificateInspectorTool(BaseTool):
         lines.append(f"| Active Protocol Version | `{proto}` | Modern | {proto_status} | Negotiated highest secure protocol supported by client and origin |")
 
         cipher = f"{tls['cipher_name']} ({tls['cipher_bits']}-bit)"
-        lines.append(f"| Negotiated Cipher Suite | `{cipher}` | Strong AEAD | Compliant | Forward secrecy enabled with authenticated encryption |")
+        lines.append(f"| Negotiated Cipher Suite | `{cipher}` | Observed | Review | One negotiated cipher; other supported ciphers were not enumerated |")
 
         days = tls["days_remaining"]
         if days is not None:
@@ -217,9 +217,24 @@ class SslTlsCertificateInspectorTool(BaseTool):
         lines.append("")
         return "\n".join(lines)
 
-    def _run(self, domain: str) -> str:
-        """Execute SSL/TLS inspection on target domain."""
-        clean_host = self._clean_domain(domain)
-        tls_data = self._inspect_live_socket(clean_host)
+    def inspect(self, domain: str) -> tuple[str, List[Dict[str, str]]]:
+        """Return a report and certificate observations for the requested host and port."""
+        parsed = urlparse(domain if "://" in domain else f"https://{domain}")
+        clean_host = parsed.hostname or ""
+        port = parsed.port or 443
+        tls_data = self._inspect_live_socket(clean_host, port)
         crtsh_data = self._fetch_crtsh(clean_host)
-        return self._build_report(clean_host, tls_data, crtsh_data)
+        findings = []
+        target = f"https://{parsed.netloc}"
+        if tls_data.get("verification_error"):
+            findings.append({"target": target, "title": "TLS certificate verification failed", "severity": "HIGH",
+                             "evidence": tls_data["error"], "recommendation": "Check the certificate chain, hostname and validity using a trusted client."})
+        days = tls_data.get("days_remaining")
+        if tls_data.get("success") and days is not None and days < 30:
+            findings.append({"target": target, "title": "TLS certificate expires soon", "severity": "MEDIUM",
+                             "evidence": f"The verified certificate expires in {days} days.",
+                             "recommendation": "Renew the certificate and verify the deployed chain."})
+        return self._build_report(clean_host, tls_data, crtsh_data), findings
+
+    def _run(self, domain: str) -> str:
+        return self.inspect(domain)[0]

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Loader2 } from "lucide-react";
+import { API_URL, apiFetch } from "@/lib/api";
 
 export default function DashboardLayout({
   children,
@@ -14,13 +15,18 @@ export default function DashboardLayout({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const token = localStorage.getItem("sentinelx_token");
       if (!token) {
         setIsAuthenticated(false);
         router.replace("/login");
       } else {
-        setIsAuthenticated(true);
+        try {
+          const response = await apiFetch(`${API_URL}/api/auth/me`);
+          setIsAuthenticated(response.ok);
+        } catch {
+          setIsAuthenticated(false);
+        }
       }
     };
 

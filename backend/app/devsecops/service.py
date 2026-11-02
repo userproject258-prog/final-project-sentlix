@@ -1,12 +1,12 @@
 import uuid
-import random
 import subprocess
 import json
 import os
 import sys
+import shutil
 from datetime import datetime, timezone
 from typing import Dict, Any, List
-from app.models.core import PipelineRun
+from app.models.core import PipelineRun, PipelineScanDetail, AuditReport, AuditFinding, Alert
 from sqlmodel import Session, select
 from app.database import engine
 
@@ -17,17 +17,13 @@ def run_real_sast_scan() -> Dict[str, Any]:
         venv_bandit = os.path.join(os.path.dirname(backend_dir), "venv", "bin", "bandit")
         cmd = [venv_bandit if os.path.exists(venv_bandit) else "bandit", "-r", backend_dir, "-f", "json"]
         
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        # Bandit returns 1 if issues found, 0 if clean
-        data = {}
-        if proc.stdout:
-            try:
-                # Find start of JSON
-                idx = proc.stdout.find('{')
-                if idx != -1:
-                    data = json.loads(proc.stdout[idx:])
-            except Exception:
-                pass
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        # Bandit returns 1 when findings exist; other exit codes indicate an error.
+        if proc.returncode not in (0, 1):
+            raise RuntimeError(proc.stderr.strip() or f"Bandit exited with code {proc.returncode}")
+        data = json.loads(proc.stdout)
+        if not isinstance(data.get("metrics", {}).get("_totals"), dict):
+            raise ValueError("Bandit output did not contain scan metrics")
                 
         metrics = data.get("metrics", {}).get("_totals", {})
         high_sev = metrics.get("SEVERITY.HIGH", 0)
@@ -48,7 +44,46 @@ def run_real_sast_scan() -> Dict[str, Any]:
             "engine": "Bandit SAST v1.9"
         }
     except Exception as e:
-        return {"status": "PASSED", "error": str(e), "engine": "Bandit Fallback"}
+        return {"status": "ERROR", "error": str(e), "engine": "Bandit"}
+
+def run_dependency_scan() -> Dict[str, Any]:
+    """Audit installed Python packages; requires a reachable advisory service."""
+    executable = shutil.which("pip-audit")
+    if not executable:
+        return {"status": "NOT RUN", "engine": "pip-audit", "reason": "Scanner is not installed"}
+    try:
+        proc = subprocess.run([executable, "--local", "--format", "json"], capture_output=True, text=True, timeout=180)
+        data = json.loads(proc.stdout)
+        dependencies = data.get("dependencies")
+        if proc.returncode not in (0, 1) or not isinstance(dependencies, list):
+            raise ValueError("Invalid output or scanner failure")
+        if any(not isinstance(d, dict) or not isinstance(d.get("vulns"), list) for d in dependencies):
+            raise ValueError("Incomplete dependency results")
+        vulnerabilities = [{"package": d.get("name"), "version": d.get("version"), "id": v.get("id"),
+                            "fix_versions": v.get("fix_versions", [])}
+                           for d in dependencies for v in d["vulns"]]
+        if proc.returncode == 1 and not vulnerabilities:
+            raise ValueError("Scanner returned an error without vulnerability results")
+        skipped = sum(1 for d in dependencies if d.get("skip_reason"))
+        return {"status": "FAILED" if vulnerabilities else "INCOMPLETE" if skipped else "PASSED",
+                "engine": "pip-audit", "scope": "Installed local Python environment", "skipped": skipped,
+                "vulnerabilities": vulnerabilities}
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
+        return {"status": "ERROR", "engine": "pip-audit", "reason": "Audit failed, timed out, or returned invalid output"}
+
+def run_optional_scan(executable: str, args: list[str], scope: str) -> Dict[str, Any]:
+    binary = shutil.which(executable)
+    if not binary:
+        return {"status": "NOT RUN", "engine": executable, "scope": scope, "reason": "Scanner is not installed"}
+    try:
+        proc = subprocess.run([binary, *args], capture_output=True, text=True, timeout=180)
+        if proc.returncode == 0:
+            return {"status": "PASSED", "engine": executable, "scope": scope}
+        if proc.returncode == 10:
+            return {"status": "FAILED", "engine": executable, "scope": scope}
+        return {"status": "ERROR", "engine": executable, "scope": scope, "reason": "Scanner failed"}
+    except (OSError, subprocess.TimeoutExpired):
+        return {"status": "ERROR", "engine": executable, "scope": scope, "reason": "Scanner failed or timed out"}
 
 def trigger_pipeline_scan(
     developer: str = "security-agent@sentinelx.ai", 
@@ -59,25 +94,20 @@ def trigger_pipeline_scan(
     """
     Executes a DevSecOps CI/CD security gate run:
     1. SAST (Bandit on Python source)
-    2. Secret Leak Detection (Regex git/env inspection)
-    3. Software Composition Analysis (SCA)
-    4. Container Image Vulnerability Audit (Trivy / Dockerfile gate)
+    Secret detection, installed Python dependency audit, and container configuration checks.
     """
     sast_res = run_real_sast_scan()
-    sast_status = sast_res.get("status", "PASSED")
+    sast_status = sast_res.get("status", "ERROR")
     
-    # Secret scan simulation checking git tree
-    secret_status = "PASSED"
-    # Dependency check
-    dependency_status = "PASSED" if random.random() > 0.15 else "WARNING"
-    # Container scan
-    container_status = "PASSED" if random.random() > 0.1 else "PASSED WITH WARNINGS"
-    
-    overall_status = "PASSED"
-    if sast_status == "FAILED" or secret_status == "FAILED":
-        overall_status = "FAILED"
-    elif sast_status == "WARNING" or dependency_status == "WARNING":
-        overall_status = "PASSED WITH WARNINGS"
+    source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    backend_dir = os.path.dirname(source_dir)
+    secret_res = run_optional_scan("gitleaks", ["dir", source_dir, "--redact=100", "--exit-code", "10"], "Backend source directory")
+    dependency_res = run_dependency_scan()
+    container_res = run_optional_scan("trivy", ["config", "--severity", "HIGH,CRITICAL", "--exit-code", "10", backend_dir], "Backend container configuration, not an image scan")
+    secret_status, dependency_status, container_status = (secret_res["status"], dependency_res["status"], container_res["status"])
+    statuses = [sast_status, secret_status, dependency_status, container_status]
+    overall_status = ("FAILED" if "FAILED" in statuses else "INCOMPLETE" if any(s in ("NOT RUN", "ERROR", "INCOMPLETE") for s in statuses)
+                      else "PASSED WITH WARNINGS" if "WARNING" in statuses else "PASSED")
 
     resolved_commit = commit_sha if commit_sha else str(uuid.uuid4())[:7]
     display_dev = f"{developer} ({commit_msg[:24]}...)" if commit_msg else developer
@@ -98,12 +128,18 @@ def trigger_pipeline_scan(
     
     with Session(engine) as session:
         session.add(new_run)
+        session.add(PipelineScanDetail(run_id=new_run.id, details_json=json.dumps({
+            "sast": sast_res, "secrets": secret_res, "dependencies": dependency_res, "container": container_res
+        })))
         session.commit()
         session.refresh(new_run)
         
     return {
         "run": new_run.dict(),
-        "sast_details": sast_res
+        "sast_details": sast_res,
+        "secret_details": secret_res,
+        "dependency_details": dependency_res,
+        "container_details": container_res,
     }
 
 def simulate_pipeline_run():
@@ -334,7 +370,20 @@ from app.devsecops.crew_tools.tools.authentication_security_tester import Authen
 from app.devsecops.crew_tools.tools.cve_owasp_intelligence_analyzer import CveOwaspIntelligenceAnalyzerTool
 from app.devsecops.crew_tools.tools.executive_security_report_generator import ExecutiveSecurityReportGeneratorTool
 
-def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str]) -> str:
+def _save_audit_findings(run_id: str, findings: list[dict[str, str]]) -> None:
+    """Store observations once per audit and create alerts for medium/high severity."""
+    with Session(engine) as session:
+        for item in findings:
+            finding_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run_id}|{item['target']}|{item['title']}"))
+            if session.get(AuditFinding, finding_id) is not None:
+                continue
+            session.add(AuditFinding(id=finding_id, run_id=run_id, **item))
+            if item["severity"] in {"CRITICAL", "HIGH", "MEDIUM"}:
+                session.add(Alert(id=f"AUD-{finding_id}", title=item["title"], severity=item["severity"],
+                                  source=item["target"], message=item["evidence"]))
+        session.commit()
+
+def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str], run_id: str = "") -> str:
     """Executes a deep, comprehensive security scan for the selected pipeline stage using real live tools."""
     parsed = urlparse(target if "://" in target else f"https://{target}")
     host = parsed.netloc or parsed.path.split("/")[0]
@@ -367,9 +416,12 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
             # Stage 1: Web Application Inspection (Headers, Cookies, SSL)
             headers_output = ""
             try:
-                headers_output = HttpSecurityHeadersInspectorTool()._run(url=base_url)
+                headers_output, header_findings = HttpSecurityHeadersInspectorTool().inspect(url=base_url)
             except Exception as e:
                 headers_output = f"⚠️ Header Analysis Warning: {str(e)}"
+                header_findings = []
+            if run_id and header_findings:
+                _save_audit_findings(run_id, header_findings)
 
             cookie_output = ""
             try:
@@ -379,9 +431,15 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
 
             ssl_output = ""
             try:
-                ssl_output = SslTlsCertificateInspectorTool()._run(domain=host)
+                if parsed.scheme == "https":
+                    ssl_output, ssl_findings = SslTlsCertificateInspectorTool().inspect(domain=base_url)
+                else:
+                    ssl_output, ssl_findings = "## TLS inspection\n\nNot run: target uses HTTP.", []
             except Exception as e:
                 ssl_output = f"⚠️ SSL Inspection Warning: {str(e)}"
+                ssl_findings = []
+            if run_id and ssl_findings:
+                _save_audit_findings(run_id, ssl_findings)
 
             return f"""{clean_report_markdown(headers_output)}
 
@@ -423,9 +481,12 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
             # Stage 4: Injection Testing
             sqli_output = ""
             try:
-                sqli_output = SqlInjectionVulnerabilityTesterTool()._run(url=base_url)
+                sqli_output, injection_findings = SqlInjectionVulnerabilityTesterTool().inspect(url=base_url)
             except Exception as e:
                 sqli_output = f"⚠️ Injection Testing Warning: {str(e)}"
+                injection_findings = []
+            if run_id and injection_findings:
+                _save_audit_findings(run_id, injection_findings)
 
             return clean_report_markdown(sqli_output)
 
@@ -456,28 +517,42 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
 
 
         elif stage_index == 7:
-            # Stage 7: Executive Report
-            prior_context = "\n\n".join(prior_reports)
-            
-            exec_output = ""
-            try:
-                exec_output = ExecutiveSecurityReportGeneratorTool()._run(target=target, prior_context=prior_context)
-            except Exception as e:
-                exec_output = f"⚠️ Executive Report Warning: {str(e)}"
-
-            return clean_report_markdown(exec_output)
+            sections = ["# Security Audit Evidence Summary", f"**Target:** `{target}`", "",
+                        "Review the stage evidence below. Scanner output can contain errors and requires manual validation; it does not establish compliance or confirm exploitation."]
+            for index, report in enumerate(prior_reports):
+                sections.append(f"## {PIPELINE[index][0]}\n\n{report}")
+            return "\n\n".join(sections)
 
 
     except Exception as general_err:
-        return f"## Stage {stage_index} Execution Log for `{target}`\n\n```text\n{str(general_err)}\n```\n"
+        raise RuntimeError(f"Stage {stage_index} failed: {general_err}") from general_err
 
     return f"## Stage {stage_index} Assessment Completed for `{target}`"
+
+def _save_audit_report(state: dict) -> None:
+    """Persist a snapshot containing every completed stage, including partial runs."""
+    with state["lock"]:
+        report_id = state["run_id"]
+        target = state["target"]
+        reports = dict(state["reports"])
+    if not reports:
+        return
+    content = "\n\n---\n\n".join(
+        f"# {title}\n\n{report}" for title, report in reports.items()
+    )
+    with Session(engine) as session:
+        saved = session.get(AuditReport, report_id)
+        if saved is None:
+            saved = AuditReport(id=report_id, target=target)
+        saved.content = content
+        saved.completed_stages = len(reports)
+        session.add(saved)
+        session.commit()
 
 def _execute_full_audit(state: dict, target: str, provider: str) -> None:
     os.environ["AI_PROVIDER"] = provider
     with state["lock"]:
         state["status"] = "running"
-        state["stop_requested"] = False
         state["completed"] = 0
     
     prior_reports = []
@@ -496,7 +571,7 @@ def _execute_full_audit(state: dict, target: str, provider: str) -> None:
             })
 
         try:
-            stage_report = _execute_native_stage(target, stage_index, prior_reports)
+            stage_report = _execute_native_stage(target, stage_index, prior_reports, state["run_id"])
             prior_reports.append(stage_report)
             with state["lock"]:
                 state["report"] = stage_report
@@ -507,6 +582,7 @@ def _execute_full_audit(state: dict, target: str, provider: str) -> None:
                     "label": PIPELINE[stage_index][0],
                     "status": "complete"
                 })
+            _save_audit_report(state)
         except Exception as e:
             with state["lock"]:
                 state["status"] = "failed"
@@ -514,8 +590,8 @@ def _execute_full_audit(state: dict, target: str, provider: str) -> None:
             return
 
     with state["lock"]:
-        state["status"] = "complete"
-        state["active"] = "Assessment complete"
+        state["status"] = "stopped" if state["stop_requested"] else "complete"
+        state["active"] = "Assessment paused" if state["stop_requested"] else "Assessment complete"
         state["completed"] = len(PIPELINE)
         if prior_reports:
             state["report"] = prior_reports[-1]
@@ -536,11 +612,10 @@ def _execute_guided_stage(state: dict, stage_index: int) -> None:
     target = state["target"]
 
     try:
-        report = _execute_native_stage(target, stage_index, prior_reports)
+        report = _execute_native_stage(target, stage_index, prior_reports, state["run_id"])
         with state["lock"]:
             state["report"] = report
             state["reports"][PIPELINE[stage_index][0]] = report
-            state["status"] = "complete"
             state["completed"] = stage_index + 1
             state["active"] = PIPELINE[stage_index][0]
             state["events"].append({
@@ -548,6 +623,10 @@ def _execute_guided_stage(state: dict, stage_index: int) -> None:
                 "label": PIPELINE[stage_index][0],
                 "status": "complete"
             })
+        _save_audit_report(state)
+        with state["lock"]:
+            state["status"] = ("stopped" if state["stop_requested"] else
+                               "running" if state["mode"] == "all" else "complete")
     except Exception as e:
         with state["lock"]:
             state["status"] = "failed"
@@ -558,7 +637,6 @@ def _execute_remaining_stages(state: dict) -> None:
         start_index = state["completed"]
         state["mode"] = "all"
         state["status"] = "running"
-        state["stop_requested"] = False
     for stage_index in range(start_index, len(PIPELINE)):
         with state["lock"]:
             if state["stop_requested"]:
@@ -567,7 +645,7 @@ def _execute_remaining_stages(state: dict) -> None:
                 return
         _execute_guided_stage(state, stage_index)
         with state["lock"]:
-            if state["status"] == "failed":
+            if state["status"] in ("failed", "stopped"):
                 return
     with state["lock"]:
         state["status"] = "complete"
@@ -575,7 +653,10 @@ def _execute_remaining_stages(state: dict) -> None:
 
 def start_audit_run(target: str, mode: str = "guided", provider: str = "gemini") -> Dict[str, Any]:
     with audit_run_state["lock"]:
+        if audit_run_state["status"] in ("queued", "running"):
+            raise ValueError("An audit stage is already running.")
         audit_run_state["status"] = "queued"
+        audit_run_state["run_id"] = str(uuid.uuid4())
         audit_run_state["completed"] = 0
         audit_run_state["active"] = PIPELINE[0][0]
         audit_run_state["stage_index"] = 0
@@ -600,23 +681,36 @@ def next_guided_stage() -> Dict[str, Any]:
     with audit_run_state["lock"]:
         next_idx = audit_run_state["completed"]
         if next_idx >= len(PIPELINE):
-            return get_audit_status()
+            raise ValueError("All audit stages have already completed.")
+        if audit_run_state["status"] in ("idle", "queued", "running"):
+            raise ValueError("Start an audit and wait for the current stage to finish.")
         audit_run_state["stage_index"] = next_idx
         audit_run_state["status"] = "queued"
         audit_run_state["mode"] = "guided"
         audit_run_state["error"] = None
+        audit_run_state["stop_requested"] = False
     threading.Thread(target=_execute_guided_stage, args=(audit_run_state, next_idx), daemon=True).start()
     return get_audit_status()
 
 def run_all_remaining() -> Dict[str, Any]:
+    with audit_run_state["lock"]:
+        if audit_run_state["status"] in ("idle", "queued", "running"):
+            raise ValueError("Start an audit and wait for the current stage to finish.")
+        if audit_run_state["completed"] >= len(PIPELINE):
+            raise ValueError("All audit stages have already completed.")
+        audit_run_state["stop_requested"] = False
+        audit_run_state["status"] = "queued"
     threading.Thread(target=_execute_remaining_stages, args=(audit_run_state,), daemon=True).start()
     return get_audit_status()
 
 def stop_audit() -> Dict[str, Any]:
     with audit_run_state["lock"]:
         audit_run_state["stop_requested"] = True
-        audit_run_state["status"] = "stopped"
-        audit_run_state["active"] = "Assessment paused"
+        if audit_run_state["status"] not in ("queued", "running"):
+            audit_run_state["status"] = "stopped"
+            audit_run_state["active"] = "Assessment paused"
+        else:
+            audit_run_state["active"] = "Stopping after the current stage"
     return get_audit_status()
 
 def get_audit_status() -> Dict[str, Any]:

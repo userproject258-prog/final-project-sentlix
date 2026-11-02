@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch as fetch } from "@/lib/api";
 
 import { useEffect, useState } from "react";
 import { BarChart2 } from "lucide-react";
@@ -29,6 +29,8 @@ interface AnalyticsData {
     name: string;
     value: number;
   }[];
+  audit_distribution: { name: string; value: number }[];
+  audit_summary: { total: number; open: number; resolved: number; recent: { id: string; target: string; title: string; severity: string; status: string; time: string }[] };
 }
 
 const COLORS = {
@@ -56,6 +58,7 @@ export default function AnalyticsPage() {
         <BarChart2 className="w-7 h-7 text-primary" />
         <h1 className="text-2xl font-bold text-foreground">Security Analytics</h1>
       </div>
+      <p className="text-sm text-muted">Counts come from recorded threat events, including any traffic simulations run from the dashboard.</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Trend Chart */}
@@ -107,7 +110,7 @@ export default function AnalyticsPage() {
           </div>
           
           <div className="mt-6 pt-6 border-t border-border">
-            <h3 className="text-sm font-semibold mb-3">Summary</h3>
+            <h3 className="text-sm font-semibold mb-3">Threat events</h3>
             <div className="space-y-2">
               {data.severity_distribution.map((item, i) => (
                 <div key={i} className="flex justify-between items-center text-sm">
@@ -119,8 +122,25 @@ export default function AnalyticsPage() {
                 </div>
               ))}
             </div>
+            <h3 className="text-sm font-semibold mt-5 mb-3">Audit observations across all runs</h3>
+            <div className="space-y-2">
+              {data.audit_distribution.map((item) => (
+                <div key={item.name} className="flex justify-between text-sm"><span>{item.name}</span><span className="font-semibold">{item.value}</span></div>
+              ))}
+            </div>
           </div>
         </div>
+      </div>
+      <div className="bg-surface border-sentinel rounded-lg p-5 space-y-4">
+        <h2 className="text-lg font-semibold">Audit observations</h2>
+        <p className="text-sm text-muted">{data.audit_summary.open} open · {data.audit_summary.resolved} resolved · {data.audit_summary.total} observations across all runs. Repeat scans are counted separately; candidate findings require validation.</p>
+        {data.audit_summary.recent.length === 0 && <p className="text-sm text-muted">No audit observations recorded.</p>}
+        {data.audit_summary.recent.map((finding) => (
+          <div key={finding.id} className="border-t border-border pt-3 text-sm">
+            <p className="font-semibold">{finding.title} · {finding.severity} · {finding.status}</p>
+            <p className="text-muted break-all">{finding.target} · {new Date(finding.time).toLocaleString()}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -8,7 +8,13 @@ The most important configuration is ensuring the Frontend knows where the Backen
 When deploying the **Frontend**, you MUST set the following environment variable:
 `NEXT_PUBLIC_API_URL=https://your-backend-url.com`
 
-*(Currently, the frontend uses `http://localhost:8000` by default. Before a production build, you should replace the hardcoded `localhost:8000` in the frontend `fetch` calls to use `process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"`)*.
+The frontend defaults to `http://localhost:8000` for local development. Set the URL at build time for deployed frontend builds.
+
+The first registered account becomes the account for the installation; public self-registration closes afterwards. Existing users can still sign in. API sessions expire after 12 hours, and existing users must sign in again after this upgrade. All authenticated users share access to the same dashboard and audit data; roles and per-user isolation are not implemented.
+
+For GitHub webhooks, set `GITHUB_WEBHOOK_SECRET` on the backend and configure the same secret in GitHub. The pipeline webhook accepts a valid GitHub SHA-256 signature or a signed-in user's bearer token. Other API endpoints require a bearer session. Use HTTPS for deployed installations.
+
+Pipeline scans use Bandit on backend code, pip-audit on the installed local Python environment, optional Gitleaks on backend source, and optional Trivy on backend container configuration. Install Gitleaks and Trivy in the backend environment to enable those checks; they are not included in the current Docker image. Trivy checks configuration rather than a built image. pip-audit needs network access to the advisory service. A missing or failed scanner is reported as incomplete, not as a pass. These checks examine the backend server's files and environment, not the commit named in a webhook.
 
 ---
 

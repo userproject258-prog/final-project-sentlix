@@ -13,3 +13,21 @@ export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (
     : API_URL.replace("http://", "ws://") + "/ws/live"
 );
 
+export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const token = typeof window === "undefined" ? null : localStorage.getItem("sentinelx_token");
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await globalThis.fetch(input, { ...init, headers });
+  if (response.status === 401 && typeof window !== "undefined") {
+    localStorage.removeItem("sentinelx_token");
+    localStorage.removeItem("sentinelx_user");
+    window.location.replace("/login");
+  }
+  return response;
+}
+
+export function websocketProtocols(): string[] {
+  const token = typeof window === "undefined" ? null : localStorage.getItem("sentinelx_token");
+  return token ? ["bearer", token] : [];
+}
+

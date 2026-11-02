@@ -300,8 +300,8 @@ class HttpSecurityHeadersInspectorTool(BaseTool):
         lines.append("")
         return "\n".join(lines)
 
-    def _run(self, url: str) -> str:
-        """Execute deep HTTP security headers inspection on target URL."""
+    def inspect(self, url: str) -> Tuple[str, List[Dict[str, str]]]:
+        """Return the report and narrowly scoped observations from one HTTP response."""
         target_url = self._normalize_url(url)
 
         try:
@@ -312,17 +312,33 @@ class HttpSecurityHeadersInspectorTool(BaseTool):
                 headers={"User-Agent": "CyberShield-SecurityHeaders/2.0"},
             )
         except requests.exceptions.SSLError as exc:
-            return f"## HTTP Transport Security Assessment\n\n| Parameter | Value | Status | Context |\n|---|---|---|---|\n| SSL Connection | Failed | Error | Target failed TLS handshake: {str(exc)} |\n"
+            return f"## HTTP Transport Security Assessment\n\n| Parameter | Value | Status | Context |\n|---|---|---|---|\n| SSL Connection | Failed | Error | Target failed TLS handshake: {str(exc)} |\n", []
         except requests.exceptions.RequestException as exc:
-            return f"## HTTP Transport Security Assessment\n\n| Parameter | Value | Status | Context |\n|---|---|---|---|\n| HTTP Connection | Failed | Error | Could not connect to target URL: {str(exc)} |\n"
+            return f"## HTTP Transport Security Assessment\n\n| Parameter | Value | Status | Context |\n|---|---|---|---|\n| HTTP Connection | Failed | Error | Could not connect to target URL: {str(exc)} |\n", []
 
         redirect_chain = [f"{r.status_code} ({r.url})" for r in resp.history]
         resp_headers = {k.lower(): v for k, v in resp.headers.items()}
 
-        return self._build_report(
+        report = self._build_report(
             url=target_url,
             final_url=resp.url,
             status_code=resp.status_code,
             redirect_chain=redirect_chain,
             resp_headers=resp_headers,
         )
+        findings = []
+        checks = [
+            ("Content-Security-Policy", "MEDIUM", "Configure a Content-Security-Policy appropriate for the application."),
+            ("X-Content-Type-Options", "LOW", "Set X-Content-Type-Options: nosniff."),
+        ]
+        if urlparse(resp.url).scheme.lower() == "https":
+            checks.append(("Strict-Transport-Security", "MEDIUM", "Consider HSTS after confirming HTTPS is enabled for the intended scope."))
+        for header, severity, recommendation in checks:
+            if not resp_headers.get(header.lower()):
+                findings.append({"title": f"Missing {header} header", "severity": severity,
+                                 "target": resp.url, "evidence": f"{header} was absent from the HTTP {resp.status_code} response.",
+                                 "recommendation": recommendation})
+        return report, findings
+
+    def _run(self, url: str) -> str:
+        return self.inspect(url)[0]

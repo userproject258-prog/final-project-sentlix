@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch as fetch } from "@/lib/api";
 
 import { useEffect, useState } from "react";
 import { Activity, Cpu, HardDrive, Network, Server, Zap } from "lucide-react";

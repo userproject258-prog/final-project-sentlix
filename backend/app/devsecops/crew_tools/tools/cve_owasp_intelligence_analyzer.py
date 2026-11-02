@@ -112,7 +112,7 @@ class CveOwaspIntelligenceAnalyzerTool(BaseTool):
         keywords = {
             "Nginx": ["nginx"],
             "Apache": ["apache", "httpd"],
-            "OpenSSL": ["openssl", "tls"],
+            "OpenSSL": ["openssl"],
             "Next.js": ["next.js", "_next/static", "nextjs"],
             "React": ["react", "react.js"],
             "Django": ["django", "csrftoken"],
@@ -124,13 +124,9 @@ class CveOwaspIntelligenceAnalyzerTool(BaseTool):
         for tech_name, sigs in keywords.items():
             if any(s in context_lower for s in sigs):
                 # Try to extract version
-                ver_match = re.search(rf"{tech_name.lower()}[/\s\-_v]+(\d+\.\d+(?:\.\d+)?)", context_lower)
-                ver_str = ver_match.group(1) if ver_match else "Detected Release"
+                ver_match = re.search(rf"{re.escape(tech_name.lower())}[/\s\-_v]+(\d+\.\d+(?:\.\d+)?)", context_lower)
+                ver_str = ver_match.group(1) if ver_match else "Unknown"
                 techs.append({"name": tech_name, "version": ver_str})
-
-        if not techs:
-            techs.append({"name": "Nginx", "version": "Edge Proxy"})
-            techs.append({"name": "Cloudflare", "version": "Edge WAF"})
 
         return techs
 
@@ -350,21 +346,19 @@ class CveOwaspIntelligenceAnalyzerTool(BaseTool):
 
     # ── Entry Point ──
     def _run(self, target: str, prior_context: Optional[str] = "") -> str:
-        """Execute deep CVE and OWASP threat intelligence analysis."""
+        """Summarize candidate fingerprints without asserting unverified vulnerabilities."""
         parsed = urlparse(target if "://" in target else f"https://{target}")
         host = parsed.netloc or parsed.path.split("/")[0]
-
-        # 1. Extract technologies from prior audit context
-        techs = self._extract_technologies(prior_context or target)
-
-        # 2. Correlate with CVE databases
-        cves = self._correlate_cves(techs)
-
-        # 3. Map findings to OWASP Top 10:2021
-        owasp_matrix = self._map_owasp_top_10(prior_context or "", host)
-
-        # 4. Build threat actor attack chains
-        attack_chains = self._build_attack_chains(host)
-
-        # 5. Render executive tabular data-sheet report
-        return self._render_report(host, techs, cves, owasp_matrix, attack_chains)
+        techs = self._extract_technologies(prior_context or "")
+        lines = ["# CVE and OWASP Review", f"**Target:** `{host}`", "",
+                 "## Candidate technology fingerprints", "",
+                 "These are text matches from earlier stages, not confirmed inventory. Verify versions against the deployed application or its SBOM.", ""]
+        if techs:
+            lines.extend(["| Technology | Candidate version |", "|---|---|"])
+            lines.extend(f"| {item['name']} | {item['version']} |" for item in techs)
+        else:
+            lines.append("No technology fingerprints were found in the supplied context.")
+        lines.extend(["", "## Vulnerability and OWASP review", "",
+                      "No CVE applicability has been verified. Match confirmed package versions and configurations against a current vulnerability source before reporting affected components.",
+                      "Review the preceding stage evidence for access control, cryptography, injection, configuration, authentication, logging, and other OWASP Top 10 categories. Absence of evidence is not a passed test."])
+        return "\n".join(lines)

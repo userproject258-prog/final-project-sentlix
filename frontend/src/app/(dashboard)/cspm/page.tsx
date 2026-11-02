@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch as fetch } from "@/lib/api";
 
 import { useEffect, useState } from "react";
 import { DataTable } from "@/components/ui/DataTable";

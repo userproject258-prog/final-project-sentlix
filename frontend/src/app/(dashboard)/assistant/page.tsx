@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch as fetch } from "@/lib/api";
 
 import { useState, useRef, useEffect } from "react";
 import { Bot, User, Send, Loader2, Sparkles, Shield, Terminal, Copy, Check } from "lucide-react";
@@ -28,15 +28,14 @@ export default function AssistantPage() {
 
   const messageIdRef = useRef(1);
 
-  const [keyStatus, setKeyStatus] = useState<{ configured: boolean; prefix?: string } | null>(null);
+  const [keyStatus, setKeyStatus] = useState<{ configured: boolean } | null>(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/assistant/status`)
       .then(res => res.json())
       .then(data => {
         setKeyStatus({
-          configured: !!data.gemini_api_key_configured,
-          prefix: data.key_prefix
+          configured: !!data.gemini_api_key_configured
         });
       })
       .catch(() => setKeyStatus({ configured: false }));
@@ -69,8 +68,9 @@ export default function AssistantPage() {
       const response = await fetch(`${API_URL}/api/assistant/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText }),
+        body: JSON.stringify({ prompt: promptText, history: messages.filter(m => m.id !== "1").slice(-8).map(m => ({ role: m.role, content: m.content.slice(0, 4000) })) }),
       });
+      if (!response.ok) throw new Error("Assistant request failed");
       const data = await response.json();
       
       messageIdRef.current += 1;
@@ -99,10 +99,10 @@ export default function AssistantPage() {
   };
 
   const quickPrompts = [
-    { label: "S3 Bucket Exposure", query: "Why is public S3 risky and how do I fix it?" },
-    { label: "SSH Brute Force", query: "Analyze the SSH brute force threat on port 22" },
-    { label: "Environment Briefing", query: "Give me a summary of current alerts and active findings" },
-    { label: "Terraform Remediation", query: "Generate Terraform code to enforce S3 bucket public access block" }
+    { label: "Priority findings", query: "Which recorded audit findings should I investigate first and why?" },
+    { label: "Validate results", query: "How can I validate the recent candidate vulnerabilities safely?" },
+    { label: "Environment briefing", query: "Summarize the recent alerts, threats and audit findings." },
+    { label: "Remediation plan", query: "Create a remediation plan based on the recorded audit evidence." }
   ];
 
   const renderMessageContent = (content: string) => {
@@ -214,7 +214,7 @@ export default function AssistantPage() {
                 : 'bg-amber-50 text-amber-800 border-amber-300'
             }`}>
               <Sparkles className={`w-3.5 h-3.5 ${keyStatus.configured ? 'text-emerald-600' : 'text-amber-600'}`} />
-              <span>{keyStatus.configured ? `Gemini Live Active (${keyStatus.prefix})` : 'Gemini Key Missing on Backend'}</span>
+              <span>{keyStatus.configured ? 'Gemini configured' : 'Local summary mode'}</span>
             </div>
           )}
           <div className="hidden sm:flex items-center gap-2 text-xs text-muted bg-surface border border-border rounded-md px-3 py-1.5">
@@ -224,6 +224,7 @@ export default function AssistantPage() {
         </div>
       </div>
 
+      <p className="px-5 py-2 text-xs text-muted border-b border-border">When Gemini is configured, recent findings, report excerpts, alerts, and chat history are sent to Google for analysis. Results and coverage are limited to the records supplied.</p>
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-gray-50/50">

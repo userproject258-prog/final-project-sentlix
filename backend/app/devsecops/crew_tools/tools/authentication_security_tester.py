@@ -1,4 +1,4 @@
-from crewai.tools import BaseTool
+from .base import BaseTool
 from pydantic import BaseModel, Field
 from typing import Type, List, Dict, Any, Optional, Tuple
 import requests
@@ -95,7 +95,7 @@ class AuthenticationSecurityTesterTool(BaseTool):
     def _discover_login_page(self, session: requests.Session, base_url: str) -> Tuple[str, str, Optional[requests.Response]]:
         # Check initial URL first
         try:
-            r = session.get(base_url, timeout=TIMEOUT, verify=False, allow_redirects=True)
+            r = session.get(base_url, timeout=TIMEOUT, verify=True, allow_redirects=False)
             if re.search(r'type=["\']password["\']', r.text, re.IGNORECASE):
                 return r.url, r.text, r
         except Exception:
@@ -108,7 +108,7 @@ class AuthenticationSecurityTesterTool(BaseTool):
         for path in LOGIN_CANDIDATE_PATHS:
             test_url = f"{origin}{path}"
             try:
-                r = session.get(test_url, timeout=TIMEOUT, verify=False, allow_redirects=True)
+                r = session.get(test_url, timeout=TIMEOUT, verify=True, allow_redirects=False)
                 if r.status_code == 200 and re.search(r'type=["\']password["\']', r.text, re.IGNORECASE):
                     return r.url, r.text, r
             except Exception:
@@ -116,7 +116,7 @@ class AuthenticationSecurityTesterTool(BaseTool):
 
         # Default fallback to original
         try:
-            r_fallback = session.get(base_url, timeout=TIMEOUT, verify=False, allow_redirects=True)
+            r_fallback = session.get(base_url, timeout=TIMEOUT, verify=True, allow_redirects=False)
             return r_fallback.url, r_fallback.text, r_fallback
         except Exception:
             return base_url, "", None
@@ -163,7 +163,7 @@ class AuthenticationSecurityTesterTool(BaseTool):
                     data={"username": username, "password": password, "user": username, "pass": password, "email": f"{username}@test.com"},
                     timeout=6.0,
                     allow_redirects=False,
-                    verify=False,
+                    verify=True,
                 )
                 elapsed_ms = round((time.time() - start_t) * 1000, 1)
                 st = resp.status_code
@@ -172,11 +172,11 @@ class AuthenticationSecurityTesterTool(BaseTool):
                 is_keyword_success = any(kw in body_lower for kw in SUCCESS_KEYWORDS) and not any(kw in body_lower for kw in FAILURE_KEYWORDS)
 
                 if is_redirect_success or is_keyword_success:
-                    verdict = "Vulnerable (Accepted)"
-                    risk = "Critical"
+                    verdict = "Possible success indicator; verify manually"
+                    risk = "Unverified"
                 else:
-                    verdict = "Rejected / Access Denied"
-                    risk = "Low"
+                    verdict = "No success indicator observed"
+                    risk = "Unknown"
 
                 results.append({
                     "credentials": f"`{username}` : `{password}`",
@@ -190,8 +190,8 @@ class AuthenticationSecurityTesterTool(BaseTool):
                     "credentials": f"`{username}` : `{password}`",
                     "status": "Timeout / Blocked",
                     "latency": "—",
-                    "verdict": "Connection Handled",
-                    "risk": "Low",
+                    "verdict": "Request failed; result unknown",
+                    "risk": "Unknown",
                 })
             time.sleep(0.05)
         return results
@@ -210,7 +210,7 @@ class AuthenticationSecurityTesterTool(BaseTool):
                 data={"username": valid_candidate, "password": fixed_pwd, "email": valid_candidate},
                 timeout=TIMEOUT,
                 allow_redirects=False,
-                verify=False,
+                verify=True,
             )
             lat_valid = round((time.time() - t0) * 1000, 1)
         except Exception:
@@ -224,16 +224,16 @@ class AuthenticationSecurityTesterTool(BaseTool):
                 data={"username": nonexistent_candidate, "password": fixed_pwd, "email": nonexistent_candidate},
                 timeout=TIMEOUT,
                 allow_redirects=False,
-                verify=False,
+                verify=True,
             )
             lat_invalid = round((time.time() - t0) * 1000, 1)
         except Exception:
             lat_invalid = 0
 
-        status_valid = r_valid.status_code if r_valid else 0
-        status_invalid = r_invalid.status_code if r_invalid else 0
-        body_valid = r_valid.text.lower() if r_valid else ""
-        body_invalid = r_invalid.text.lower() if r_invalid else ""
+        status_valid = r_valid.status_code if r_valid is not None else 0
+        status_invalid = r_invalid.status_code if r_invalid is not None else 0
+        body_valid = r_valid.text.lower() if r_valid is not None else ""
+        body_invalid = r_invalid.text.lower() if r_invalid is not None else ""
 
         status_differ = (status_valid != status_invalid and status_valid != 0 and status_invalid != 0)
         time_delta_ms = abs(lat_valid - lat_invalid)
@@ -270,7 +270,7 @@ class AuthenticationSecurityTesterTool(BaseTool):
                     data={"username": f"brute_probe_{i}@test.com", "password": f"Password_{i}!X"},
                     timeout=TIMEOUT,
                     allow_redirects=False,
-                    verify=False,
+                    verify=True,
                 )
                 elapsed_ms = round((time.time() - start_t) * 1000, 1)
                 st = resp.status_code
@@ -321,121 +321,44 @@ class AuthenticationSecurityTesterTool(BaseTool):
 
     # ── 6. Build Tabular Markdown Report ──
     def _build_markdown_report(
-        self,
-        target_url: str,
-        login_url: str,
-        form_info: Dict[str, Any],
-        cred_results: List[Dict[str, Any]],
-        enum_results: Dict[str, Any],
-        bf_results: Dict[str, Any],
-        sso_results: List[Dict[str, Any]],
+        self, target_url: str, login_url: str, form_info: Dict[str, Any],
+        cred_results: List[Dict[str, Any]], enum_results: Dict[str, Any],
+        bf_results: Dict[str, Any], sso_results: List[Dict[str, Any]],
         response: Optional[requests.Response],
     ) -> str:
-        headers = {k.lower(): v for k, v in response.headers.items()} if response else {}
-
-        sections = []
-        sections.append("# Authentication Security & Access Control Audit")
-        sections.append(f"**Target System:** `{target_url}` | **Evaluated Login Endpoint:** `{login_url}`\n")
-
-        # 1. Overview Matrix
-        sections.append("## Authentication Posture Overview\n")
-        sections.append("| Security Control Vector | Assessment Metric | Posture Rating | Compliance / Benchmark Verdict |")
-        sections.append("|---|---|---|---|")
-        sections.append(f"| Transport Layer Encryption | {'HTTPS Enforced' if form_info['has_https'] else 'Insecure HTTP'} | {'Protected' if form_info['has_https'] else 'Critical'} | {'All credentials encrypted via TLS in transit' if form_info['has_https'] else 'Credentials transmitted in cleartext'} |")
-        sections.append(f"| CSRF Defense Token | {'Present' if form_info['has_csrf'] else 'Missing / Implicit'} | {'Protected' if form_info['has_csrf'] else 'High'} | {'Anti-CSRF token validates form origin' if form_info['has_csrf'] else 'Login endpoint lacks explicit CSRF tokens'} |")
-        sections.append(f"| Default Credentials Shield | {len(cred_results)} Pairs Audited | {'Protected' if not any(c['risk'] == 'Critical' for c in cred_results) else 'Critical'} | {'No administrative default accounts accepted' if not any(c['risk'] == 'Critical' for c in cred_results) else 'Default administrative credentials accepted!'} |")
-        sections.append(f"| Username Enumeration Oracle | {'Timing / Content Differential' if (enum_results['timing_oracle'] or enum_results['message_differ']) else 'Uniform Response'} | {'Warning' if (enum_results['timing_oracle'] or enum_results['message_differ']) else 'Clean'} | {'Response variations permit user discovery' if (enum_results['timing_oracle'] or enum_results['message_differ']) else 'Consistent responses mitigate user enumeration'} |")
-        sections.append(f"| Brute-Force & Lockout Policy | {'Active (Throttled/CAPTCHA)' if (bf_results['lockout_triggered'] or bf_results['captcha_triggered']) else 'Unrestricted Submissions'} | {'Protected' if (bf_results['lockout_triggered'] or bf_results['captcha_triggered']) else 'Medium'} | {'Rate limiting or challenge active against password guessing' if (bf_results['lockout_triggered'] or bf_results['captcha_triggered']) else 'Endpoint accepts consecutive failed attempts without delay'} |")
-        sections.append(f"| Modern WebAuthn / Passkeys | {'Supported' if form_info['has_webauthn'] else 'Standard Password'} | {'Advanced' if form_info['has_webauthn'] else 'Standard'} | {'FIDO2 / WebAuthn passwordless integration detected' if form_info['has_webauthn'] else 'Traditional username/password credentials utilized'} |")
-
-        # 2. Login Interface & Form Security
-        sections.append("\n## Login Interface & Form Security Catalog\n")
-        sections.append("| Component Property | Detected Setting | Security Evaluation | Recommended Hardening |")
-        sections.append("|---|---|---|---|")
-        pwd_masking = 'type="password"' if form_info['has_password'] else 'No Password Field'
-        form_action_eval = 'Secure Same-Origin' if form_info['is_action_https'] else 'External / Insecure'
-        autocomplete_eval = 'Managed' if form_info['has_autocomplete'] else 'Low Risk'
-        sections.append(f"| Form Target Action | `{form_info['form_action']}` | {form_action_eval} | Ensure form submissions route strictly to HTTPS endpoints. |")
-        sections.append(f"| Password Input Masking | {pwd_masking} | Standard Form Field | Client masks credential input characters on display. |")
-        sections.append(f"| Autocomplete Setting | {'autocomplete set' if form_info['has_autocomplete'] else 'Unset / Default'} | {autocomplete_eval} | Set `autocomplete=\"current-password\"` to assist password managers. |")
-        sections.append(f"| Cross-Origin Isolation | {'Same-Origin Action' if form_info['is_action_https'] else 'Cross-Domain'} | Enforced | Validate Origin and Referer headers on authentication handler. |")
-
-        # 3. Credential Stuffing & Default Accounts
-        sections.append("\n## Credential Stuffing & Default Accounts Audit\n")
-        sections.append("| Audited Credential Pair | Server HTTP Response | Round-Trip Latency | Security Verdict | Risk Level |")
-        sections.append("|---|---|---|---|---|")
-        for cr in cred_results:
-            sections.append(f"| {cr['credentials']} | `{cr['status']}` | `{cr['latency']}` | {cr['verdict']} | {cr['risk']} |")
-
-        # 4. Account Enumeration & Timing Oracle
-        sections.append("\n## Account Enumeration & Timing Oracle Analysis\n")
-        sections.append("| Enumeration Vector | Valid User Probe | Non-Existent User Probe | Variance / Delta | Oracle Vulnerability |")
-        sections.append("|---|---|---|---|---|")
-        sections.append(f"| HTTP Status Code | `HTTP {enum_results['status_valid']}` | `HTTP {enum_results['status_invalid']}` | {'Status Differential' if enum_results['status_differ'] else 'Uniform Status'} | {'Vulnerable' if enum_results['status_differ'] else 'Mitigated'} |")
-        sections.append(f"| Processing Latency (Timing) | `{enum_results['lat_valid_ms']}ms` | `{enum_results['lat_invalid_ms']}ms` | `Δ {enum_results['time_delta_ms']}ms` | {'Potential Timing Oracle' if enum_results['timing_oracle'] else 'Uniform Response Timing'} |")
-        sections.append(f"| Error Message Content | Evaluated | Evaluated | {'Message Divergence' if enum_results['message_differ'] else 'Consistent Error'} | {'Information Disclosure' if enum_results['message_differ'] else 'Mitigated'} |")
-
-        # 5. Brute-Force Throttling & Lockout Matrix
-        sections.append("\n## Brute-Force Throttling & Lockout Matrix\n")
-        sections.append("| Probe Sequence | HTTP Response Code | Observed Latency | Rate Limiting & Lockout Behavior |")
-        sections.append("|---|---|---|---|")
-        for att in bf_results["attempts"]:
-            sections.append(f"| `{att['attempt']}` | `{att['status']}` | `{att['latency']}` | {att['behavior']} |")
-
-        # 6. Session Token & Authentication Header Matrix
-        sections.append("\n## Session Token & Authentication Header Matrix\n")
-        sections.append("| Security Header | Detected Value | Hardening State | Protective Function |")
-        sections.append("|---|---|---|---|")
-        for h_name, h_info in AUTH_SECURITY_HEADERS.items():
-            val = headers.get(h_name.lower())
-            if val:
-                val_clean = val.replace("\n", " ").strip()
-                if len(val_clean) > 40:
-                    val_clean = val_clean[:37] + "..."
-                sections.append(f"| `{h_name}` | `{val_clean}` | Configured | {h_info['role']} |")
-            else:
-                sections.append(f"| `{h_name}` | _Not Configured_ | Missing | {h_info['role']} (Recommend: `{h_info['rec']}`) |")
-
-        # 7. SSO & Identity Federation Discovery
-        sections.append("\n## Identity Federation & SSO Discovery\n")
+        lines = ["# Authentication Assessment", f"**Target:** `{target_url}`",
+                 f"**Page inspected:** `{login_url}`", "",
+                 "The following signals are not proof of account access, effective rate limits, or complete authentication coverage.",
+                 "", "## Login Page Observations", "",
+                 f"- Password field found: {form_info['has_password']}",
+                 f"- Page used HTTPS: {form_info['has_https']}",
+                 f"- CSRF-related markup observed: {form_info['has_csrf']} (server-side validation not tested)",
+                 f"- WebAuthn-related markup observed: {form_info['has_webauthn']}",
+                 f"- Page HTTP status: {response.status_code if response is not None else 'request failed'}",
+                 "", "## Credential Probe Responses", ""]
+        if not cred_results:
+            lines.append("Not run: no in-scope password form was identified.")
+        for item in cred_results:
+            lines.append(f"- {item['credentials']}: {item['status']} — {item['verdict']}")
+        if enum_results:
+            lines.extend(["", "## Response Comparison", "",
+                          "Both usernames are guesses; neither was verified as an existing account. A response difference is not proof of account enumeration.",
+                          f"- HTTP statuses: {enum_results['status_valid']} and {enum_results['status_invalid']} (0 indicates request failure).",
+                          f"- Measured latency difference: {enum_results['time_delta_ms']} ms from a single pair of requests."])
+        if bf_results.get("attempts"):
+            lines.extend(["", "## Repeated Request Observations", "",
+                          "Different usernames were used. These requests do not establish whether account lockout or rate limiting is effective."])
+            for item in bf_results["attempts"]:
+                lines.append(f"- {item['attempt']}: {item['status']} ({item['behavior']})")
         if sso_results:
-            sections.append("| Identity Protocol / Provider | Deployment Status | Security Scope |")
-            sections.append("|---|---|---|")
-            for sso in sso_results:
-                sections.append(f"| `{sso['protocol']}` | {sso['status']} | {sso['security_impact']} |")
-        else:
-            sections.append("| Identity Protocol / Provider | Deployment Status | Security Scope |")
-            sections.append("|---|---|---|")
-            sections.append("| Local Database Authentication | Standalone | Direct credential authentication against local database instance |")
-
-        # 8. Action Items Roadmap
-        sections.append("\n## Authentication Hardening Action Items\n")
-        sections.append("| Finding Focus | Severity | Target Mechanism | Recommended Remediation Action | Reference |")
-        sections.append("|---|---|---|---|---|")
-        if not form_info["has_https"]:
-            sections.append("| Insecure Transport | Critical | Login Gateway | Enforce HTTPS exclusively with HSTS preloading enabled. | OWASP A02:2021 |")
-        if not form_info["has_csrf"]:
-            sections.append("| Anti-CSRF Protection | High | Login Form | Implement cryptographic synchronizer tokens or SameSite=Strict cookies. | OWASP A01:2021 |")
-        if enum_results["timing_oracle"] or enum_results["message_differ"]:
-            sections.append("| Account Enumeration Shield | Medium | Auth Handler | Standardize error messages to 'Invalid username or password' with constant-time password comparison. | CWE-204 |")
-        if not bf_results["lockout_triggered"] and not bf_results["captcha_triggered"]:
-            sections.append("| Credential Stuffing Guard | High | Login Endpoint | Enforce progressive rate limiting (e.g. 5 attempts / min) and CAPTCHA challenge on repeated failures. | OWASP A07:2021 |")
-        sections.append("| Session Cache-Control | Medium | HTTP Headers | Enforce `Cache-Control: no-store, no-cache` on all authentication endpoints. | CWE-525 |")
-        sections.append("| Multi-Factor Authentication | Medium | User Accounts | Require 2FA/MFA (TOTP or WebAuthn/FIDO2) for all privileged and administrative accounts. | NIST SP 800-63B |")
-
-        return "\n".join(sections)
+            lines.extend(["", "## Identity Provider Markup", ""])
+            lines.extend(f"- {item['protocol']}: matching markup observed; integration not verified." for item in sso_results)
+        return "\n".join(lines)
 
     # ── Entry Point ──
     def _run(self, url: str) -> str:
         """Execute comprehensive authentication security audit."""
         target_url = self._normalize_url(url)
-
-        # Suppress insecure SSL warnings for penetration testing
-        try:
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        except Exception:
-            pass
 
         session = requests.Session()
         session.headers.update({
@@ -447,6 +370,10 @@ class AuthenticationSecurityTesterTool(BaseTool):
 
         # 2. Form architecture audit
         form_info = self._audit_form_architecture(login_url, login_html)
+
+        if not form_info["has_password"]:
+            return self._build_markdown_report(target_url, login_url, form_info, [], {},
+                                               {"attempts": []}, self._discover_sso_mfa(login_html), login_resp)
 
         # 3. Default credentials audit
         cred_results = self._audit_default_credentials(session, login_url)

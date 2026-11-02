@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, WS_URL } from "@/lib/api";
+import { API_URL, WS_URL, apiFetch as fetch, websocketProtocols } from "@/lib/api";
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Shield, AlertTriangle, Activity, Cloud, RefreshCw, Zap, Radio, Loader2 } from "lucide-react";
@@ -96,7 +96,7 @@ export default function OverviewPage() {
     // Setup live WebSocket stream
     const connectWs = () => {
       try {
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(WS_URL, websocketProtocols());
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -106,7 +106,7 @@ export default function OverviewPage() {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === "NEW_THREAT" || msg.type === "CSPM_REMEDIATED" || msg.type === "NEW_PIPELINE_RUN") {
+            if (msg.type === "NEW_THREAT" || msg.type === "CSPM_REMEDIATED" || msg.type === "NEW_PIPELINE_RUN" || msg.type === "AUDIT_FINDING_RESOLVED") {
               fetchOverview();
             }
           } catch {
@@ -216,13 +216,13 @@ export default function OverviewPage() {
         <StatCard 
           title="Total Threats" 
           value={data.stats.threats} 
-          trend={data.trends.threats?.value} 
+          trend=""
           icon={<Shield className="w-5 h-5 text-blue-500" />} 
         />
         <StatCard 
           title="Critical Events" 
           value={data.stats.critical} 
-          trend={data.trends.critical?.value} 
+          trend=""
           icon={<AlertTriangle className="w-5 h-5 text-red-500" />} 
         />
         <StatCard 
@@ -235,7 +235,7 @@ export default function OverviewPage() {
         <StatCard 
           title="Cloud Security" 
           value={`${data.stats.cloud_security_score}%`} 
-          trend={data.trends.cloud_security_score?.value} 
+          trend=""
           icon={<Cloud className="w-5 h-5 text-green-500" />} 
         />
       </div>
@@ -260,7 +260,7 @@ export default function OverviewPage() {
 
         {/* Risk Trend */}
         <div className="bg-surface border-sentinel p-5 rounded-lg shadow-sm">
-          <h2 className="text-lg font-semibold mb-4 text-foreground">Security Risk Trend</h2>
+          <h2 className="text-lg font-semibold mb-4 text-foreground">Daily Recorded Threat Weight</h2>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.risk_trend}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, WS_URL } from "@/lib/api";
+import { API_URL, WS_URL, apiFetch as fetch, websocketProtocols } from "@/lib/api";
 
 import { useEffect, useState, useRef } from "react";
 import { Bell, CheckCircle, Clock, Radio, ShieldAlert } from "lucide-react";
@@ -34,11 +34,14 @@ export default function AlertsPage() {
 
   useEffect(() => {
     fetchAlerts();
+    const interval = setInterval(fetchAlerts, 10000);
+    let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     // Setup live WebSocket connection to SentinelX
     const connectWs = () => {
       try {
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(WS_URL, websocketProtocols());
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -53,6 +56,8 @@ export default function AlertsPage() {
               fetchAlerts();
             } else if (data.type === "ALERT_RESOLVED") {
               setAlerts(prev => prev.map(a => a.id === data.alert_id ? { ...a, status: "Resolved" } : a));
+            } else if (data.type === "AUDIT_FINDING_RESOLVED") {
+              fetchAlerts();
             } else if (data.type === "CSPM_REMEDIATED") {
               setLastNotification(`🛡️ Policy resolved for resource: ${data.finding_id}`);
               fetchAlerts();
@@ -65,7 +70,7 @@ export default function AlertsPage() {
         ws.onclose = () => {
           setWsConnected(false);
           // Auto-reconnect after 3 seconds
-          setTimeout(connectWs, 3000);
+          if (!closed) reconnectTimer = setTimeout(connectWs, 3000);
         };
 
         ws.onerror = () => {
@@ -79,6 +84,9 @@ export default function AlertsPage() {
     connectWs();
 
     return () => {
+      closed = true;
+      clearInterval(interval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -86,8 +94,9 @@ export default function AlertsPage() {
   }, []);
 
   const resolveAlert = (id: string) => {
-    fetch(`http://localhost:8000/api/alerts/resolve/${id}`, { method: "POST" })
-      .then(() => {
+    fetch(`${API_URL}/api/alerts/resolve/${encodeURIComponent(id)}`, { method: "POST" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not resolve alert");
         setAlerts(prev => prev.map(a => a.id === id ? { ...a, status: "Resolved" } : a));
       })
       .catch(console.error);

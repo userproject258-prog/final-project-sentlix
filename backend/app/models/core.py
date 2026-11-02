@@ -34,6 +34,28 @@ class PipelineRun(SQLModel, table=True):
     dependency_status: str
     container_status: str
 
+class PipelineScanDetail(SQLModel, table=True):
+    run_id: str = Field(primary_key=True, foreign_key="pipelinerun.id")
+    details_json: str
+
+class AuditReport(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    time: datetime = Field(default_factory=utc_now)
+    target: str
+    completed_stages: int = 0
+    content: str = ""
+
+class AuditFinding(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    run_id: str = Field(index=True)
+    time: datetime = Field(default_factory=utc_now)
+    target: str
+    title: str
+    severity: str
+    evidence: str
+    recommendation: str
+    status: str = "Open"
+
 class SystemMetric(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     time: datetime = Field(default_factory=utc_now)
@@ -71,4 +93,9 @@ class User(SQLModel, table=True):
     name: str
     hashed_password: str
     created_at: datetime = Field(default_factory=utc_now)
+
+class AuthSession(SQLModel, table=True):
+    token_hash: str = Field(primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    expires_at: datetime
 

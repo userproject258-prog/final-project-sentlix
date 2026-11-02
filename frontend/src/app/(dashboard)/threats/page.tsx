@@ -1,20 +1,13 @@
 "use client";
 
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch as fetch } from "@/lib/api";
 
 import { useEffect, useState } from "react";
 import { DataTable } from "@/components/ui/DataTable";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { 
   ShieldAlert, 
-  Activity, 
   Zap, 
-  Cpu, 
-  BarChart3, 
-  Info, 
-  ChevronDown, 
-  ChevronUp,
-  BrainCircuit,
   Radio
 } from "lucide-react";
 
@@ -26,40 +19,25 @@ interface ThreatData {
   destination: string;
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
   status: string;
-  confidence: number;
+  confidence: number | null;
 }
 
-interface ModelDetails {
-  model_name: string;
-  version: string;
+interface AuditFinding {
+  id: string;
+  title: string;
+  target: string;
+  severity: string;
   status: string;
-  algorithm: string;
-  metrics: {
-    accuracy: number;
-    precision: number;
-    recall: number;
-    f1_score: number;
-    latency_ms: number;
-  };
-  features: {
-    name: string;
-    importance: number;
-    description: string;
-  }[];
-  classes: string[];
-  dataset: string;
-  confusion_matrix: {
-    actual: string;
-    predicted_normal: number;
-    predicted_attack: number;
-  }[];
+  evidence: string;
+  recommendation: string;
 }
+
+const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 export default function ThreatDetectionPage() {
   const [threats, setThreats] = useState<ThreatData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modelDetails, setModelDetails] = useState<ModelDetails | null>(null);
-  const [showModelModal, setShowModelModal] = useState(false);
+  const [findings, setFindings] = useState<AuditFinding[]>([]);
   const [simulating, setSimulating] = useState(false);
   const [simFeedback, setSimFeedback] = useState<string | null>(null);
 
@@ -76,16 +54,17 @@ export default function ThreatDetectionPage() {
       });
   };
 
-  const fetchModelDetails = () => {
-    fetch(`${API_URL}/api/threats/model`)
-      .then((res) => res.json())
-      .then((data) => setModelDetails(data))
-      .catch(console.error);
-  };
-
   useEffect(() => {
     fetchThreats();
-    fetchModelDetails();
+    const fetchFindings = () => {
+      fetch(`${API_URL}/api/devsecops/findings`)
+        .then((res) => { if (!res.ok) throw new Error("Could not load findings"); return res.json(); })
+        .then((data) => setFindings(data.findings))
+        .catch(console.error);
+    };
+    fetchFindings();
+    const timer = setInterval(() => { fetchThreats(); fetchFindings(); }, 10000);
+    return () => clearInterval(timer);
   }, []);
 
   const handleSimulateAttack = () => {
@@ -115,7 +94,7 @@ export default function ThreatDetectionPage() {
             <ShieldAlert className="w-6 h-6 text-primary" /> AI Threat Detection & Intrusion Prevention
           </h1>
           <p className="text-xs text-muted mt-1">
-            Real-time Random Forest packet vector classification on network ingress & VPC flow telemetry
+            Recorded model classifications and audit observations; traffic simulations may be included. Automatic intrusion blocking is not configured.
           </p>
         </div>
 
@@ -146,116 +125,21 @@ export default function ThreatDetectionPage() {
         </div>
       )}
 
-      {/* Model Status Card */}
-      <div className="bg-surface border border-sentinel rounded-xl p-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex flex-wrap items-center gap-6 sm:gap-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                <Activity className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-muted uppercase tracking-wider">Inference Engine</div>
-                <div className="text-sm font-bold text-emerald-600 flex items-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ACTIVE (1.2ms)
-                </div>
-              </div>
-            </div>
-            
-            <div className="hidden sm:block h-8 w-px bg-border"></div>
-            
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">Classifier</div>
-              <div className="text-sm font-bold text-foreground flex items-center gap-1.5 mt-0.5">
-                <Cpu className="w-4 h-4 text-primary" /> Random Forest v1.0.4
-              </div>
-            </div>
-
-            <div className="hidden sm:block h-8 w-px bg-border"></div>
-
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">Validation Accuracy</div>
-              <div className="text-sm font-bold text-foreground mt-0.5">94.2%</div>
-            </div>
-
-            <div className="hidden sm:block h-8 w-px bg-border"></div>
-
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">F1-Score</div>
-              <div className="text-sm font-bold text-foreground mt-0.5">93.3%</div>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowModelModal(!showModelModal)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 rounded-md transition-colors"
-            >
-              <BrainCircuit className="w-4 h-4" />
-              <span>{showModelModal ? "Hide Model Details" : "View Model Details & Feature Weights"}</span>
-              {showModelModal ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-          </div>
+      <section className="bg-surface border border-red-200 rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold text-red-700">Open audit observations</h2>
+          <p className="text-xs text-muted mt-1">Candidate findings require validation. Resolve or review details in the DevSecOps audit page.</p>
         </div>
-
-        {/* Expandable Model Details Drawer */}
-        {showModelModal && modelDetails && (
-          <div className="mt-5 pt-5 border-t border-border space-y-5 animate-in fade-in-50 duration-200">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <span className="text-xs text-muted font-medium">Precision</span>
-                <div className="text-xl font-bold text-gray-900 mt-1">{modelDetails.metrics.precision}%</div>
-              </div>
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <span className="text-xs text-muted font-medium">Recall</span>
-                <div className="text-xl font-bold text-gray-900 mt-1">{modelDetails.metrics.recall}%</div>
-              </div>
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <span className="text-xs text-muted font-medium">F1-Score</span>
-                <div className="text-xl font-bold text-gray-900 mt-1">{modelDetails.metrics.f1_score}%</div>
-              </div>
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <span className="text-xs text-muted font-medium">Inference Latency</span>
-                <div className="text-xl font-bold text-gray-900 mt-1">{modelDetails.metrics.latency_ms} ms / vector</div>
-              </div>
-            </div>
-
-            {/* Feature Importance Bar chart */}
-            <div>
-              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <BarChart3 className="w-3.5 h-3.5 text-primary" /> Feature Importance Distribution (Gini Impurity)
-              </h4>
-              <div className="space-y-2.5">
-                {modelDetails.features.map((feat, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="font-mono font-medium text-gray-800">{feat.name}</span>
-                      <span className="font-semibold text-gray-600">{feat.importance}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className="bg-primary h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${feat.importance}%` }}
-                      />
-                    </div>
-                    <div className="text-[11px] text-muted">{feat.description}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Confusion Matrix & Dataset Info */}
-            <div className="p-3.5 bg-blue-50/60 border border-blue-200 rounded-lg text-xs space-y-1 text-blue-900">
-              <div className="font-bold flex items-center gap-1.5 text-blue-950">
-                <Info className="w-4 h-4 text-blue-600" /> Training & Dataset Grounding
-              </div>
-              <p className="text-xs leading-relaxed">
-                Trained on <strong>{modelDetails.dataset}</strong> using scikit-learn. Detected classes: <strong>{modelDetails.classes.join(", ")}</strong>. Model exported to <code>threat_model.pkl</code> with persistent LabelEncoder.
-              </p>
-            </div>
+        {findings.filter(f => f.status === "Open").length === 0 && <p className="text-sm text-muted">No open audit observations are recorded.</p>}
+        {findings.filter(f => f.status === "Open").sort((a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)).map(f => (
+          <div key={f.id} className="border-t border-border pt-3 text-sm">
+            <div className="font-semibold">{f.title} <span className="text-red-700">· {f.severity}</span></div>
+            <div className="text-muted break-all">{f.target}</div>
+            <div>{f.evidence}</div>
+            <div className="text-muted">{f.recommendation}</div>
           </div>
-        )}
-      </div>
+        ))}
+      </section>
 
       {/* Threat Data Table */}
       <div className="bg-surface border border-sentinel rounded-xl shadow-xs overflow-hidden">
@@ -299,14 +183,14 @@ export default function ThreatDetectionPage() {
                 accessor: (row) => {
                   const conf = typeof row.confidence === 'number' 
                     ? (row.confidence > 1 ? row.confidence : row.confidence * 100) 
-                    : 95.0;
+                    : NaN;
                   return (
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold">{conf.toFixed(1)}%</span>
+                      <span className="font-mono text-xs font-semibold">{Number.isNaN(conf) ? "Unavailable" : `${conf.toFixed(1)}%`}</span>
                       <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                         <div 
                           className={`h-full ${conf > 90 ? 'bg-emerald-500' : conf > 70 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                          style={{ width: `${Math.min(100, conf)}%` }}
+                          style={{ width: `${(Number.isNaN(conf) ? 0 : Math.min(100, conf))}%` }}
                         />
                       </div>
                     </div>

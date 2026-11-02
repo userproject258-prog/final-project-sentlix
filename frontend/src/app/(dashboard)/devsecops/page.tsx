@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch as fetch } from "@/lib/api";
 import MarkdownReport, { stripEmojis, normalizeMarkdownText } from "@/components/MarkdownReport";
 import {
   Shield,
@@ -38,6 +38,27 @@ interface ToolItem {
   detail: string;
 }
 
+interface AuditFinding {
+  id: string;
+  target: string;
+  title: string;
+  severity: string;
+  evidence: string;
+  recommendation: string;
+  status: string;
+}
+
+interface PipelineRun {
+  id: string;
+  time: string;
+  status: string;
+  sast_status: string;
+  secret_status: string;
+  dependency_status: string;
+  container_status: string;
+  details?: { dependencies?: { scope?: string; vulnerabilities?: { package: string; version: string; id: string; fix_versions: string[] }[] } } | null;
+}
+
 interface AuditState {
   status: "idle" | "queued" | "running" | "complete" | "stopped" | "failed";
   completed: number;
@@ -59,6 +80,8 @@ interface AuditState {
 
 export default function DevSecOpsPage() {
   const [audit, setAudit] = useState<AuditState | null>(null);
+  const [findings, setFindings] = useState<AuditFinding[]>([]);
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
   const [target, setTarget] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [mode, setMode] = useState<"guided" | "all">("guided");
@@ -80,6 +103,18 @@ export default function DevSecOpsPage() {
       }
     } catch (err) {
       console.error("Failed to fetch audit status:", err);
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/devsecops/findings`);
+      if (response.ok) setFindings((await response.json()).findings);
+    } catch (err) {
+      console.error("Failed to fetch audit findings:", err);
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/devsecops/runs`);
+      if (response.ok) setPipelineRuns((await response.json()).runs);
+    } catch (err) {
+      console.error("Failed to fetch pipeline runs:", err);
     }
   }, []);
 
@@ -136,9 +171,11 @@ export default function DevSecOpsPage() {
     try {
       const res = await fetch(`${API_URL}/api/devsecops/audit/next`, { method: "POST" });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not start the next stage");
       setAudit(data);
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : "Could not start the next stage");
     } finally {
       setActionLoading(false);
     }
@@ -149,9 +186,11 @@ export default function DevSecOpsPage() {
     try {
       const res = await fetch(`${API_URL}/api/devsecops/audit/run-all`, { method: "POST" });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not continue the audit");
       setAudit(data);
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : "Could not continue the audit");
     } finally {
       setActionLoading(false);
     }
@@ -162,11 +201,24 @@ export default function DevSecOpsPage() {
     try {
       const res = await fetch(`${API_URL}/api/devsecops/audit/stop`, { method: "POST" });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not stop the audit");
       setAudit(data);
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : "Could not stop the audit");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const resolveFinding = async (finding: AuditFinding) => {
+    try {
+      const response = await fetch(`${API_URL}/api/devsecops/findings/${encodeURIComponent(finding.id)}/resolve`, { method: "POST" });
+      if (!response.ok) throw new Error("Could not resolve finding");
+      await fetchStatus();
+    } catch (err) {
+      console.error(err);
+      alert("Could not resolve this observation. Check the backend connection.");
     }
   };
 
@@ -231,6 +283,34 @@ export default function DevSecOpsPage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
+      <section className="bg-surface border border-border rounded-xl p-6 space-y-3">
+        <h2 className="text-lg font-semibold">Pipeline security checks</h2>
+        <p className="text-sm text-muted">Checks run against this backend environment. Container checks inspect configuration; they do not scan a built image.</p>
+        {pipelineRuns.length === 0 && <p className="text-sm text-muted">No pipeline runs recorded.</p>}
+        {pipelineRuns.slice(0, 5).map((run) => (
+          <div key={run.id} className="border-t border-border pt-3 text-sm space-y-1">
+            <p className="font-semibold">{run.id} · {run.status} · {new Date(run.time).toLocaleString()}</p>
+            <p>SAST: {run.sast_status} · Secrets: {run.secret_status} · Python dependencies: {run.dependency_status} · Container configuration: {run.container_status}</p>
+            {run.details?.dependencies?.vulnerabilities?.map((v, index) => (
+              <p key={`${v.package}-${v.id}-${index}`} className="text-red-700">{v.package} {v.version}: {v.id} · Fix versions: {v.fix_versions?.join(", ") || "not listed"}</p>
+            ))}
+          </div>
+        ))}
+      </section>
+      <section className="bg-surface border border-border rounded-xl p-6 space-y-3">
+        <h2 className="text-lg font-semibold">Recorded audit observations</h2>
+        <p className="text-sm text-muted">HTTP header, certificate, and input-test observations from completed stages. Injection signals are candidates that require manual validation.</p>
+        {findings.length === 0 && <p className="text-sm text-muted">No structured observations recorded yet.</p>}
+        {findings.map((finding) => (
+          <div key={finding.id} className="border-t border-border pt-3 text-sm">
+            <p className="font-semibold">{finding.title} <span className="text-muted">· {finding.severity} · {finding.status}</span></p>
+            <p className="text-muted break-all">{finding.target}</p>
+            <p>{finding.evidence}</p>
+            <p className="text-muted">{finding.recommendation}</p>
+            {finding.status === "Open" && <button onClick={() => resolveFinding(finding)} className="mt-2 text-primary underline">Mark resolved for this target</button>}
+          </div>
+        ))}
+      </section>
       {/* Hero Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/40 pb-6">
         <div>
@@ -451,11 +531,11 @@ export default function DevSecOpsPage() {
               </div>
 
               <div className="p-3 rounded-lg border border-border bg-background">
-                <div className="text-[11px] font-mono text-muted uppercase">Critical / High</div>
+                <div className="text-[11px] font-mono text-muted uppercase">Critical / High mentions</div>
                 <div className="text-lg font-bold text-red-500 mt-0.5">
                   {(audit?.counts?.Critical || 0) + (audit?.counts?.High || 0)}
                 </div>
-                <div className="text-[10px] text-muted mt-0.5">High Priority Items</div>
+                <div className="text-[10px] text-muted mt-0.5">Text mentions, not finding counts</div>
               </div>
 
               <div className="p-3 rounded-lg border border-border bg-background">
@@ -637,6 +717,7 @@ export default function DevSecOpsPage() {
               </button>
             </div>
 
+            <p className="text-xs text-muted">The numbers below count severity words in the current report, not verified findings. Review the evidence before prioritizing remediation.</p>
             {/* Severity Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/10">
@@ -644,7 +725,7 @@ export default function DevSecOpsPage() {
                 <div className="text-2xl font-extrabold text-red-600 dark:text-red-400 mt-1">
                   {audit.counts?.Critical || 0}
                 </div>
-                <div className="text-[11px] text-muted mt-0.5">Immediate exploit risk</div>
+                <div className="text-[11px] text-muted mt-0.5">Word mentions</div>
               </div>
 
               <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/10">
@@ -652,7 +733,7 @@ export default function DevSecOpsPage() {
                 <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
                   {audit.counts?.High || 0}
                 </div>
-                <div className="text-[11px] text-muted mt-0.5">Priority remediation</div>
+                <div className="text-[11px] text-muted mt-0.5">Word mentions</div>
               </div>
 
               <div className="p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/10">
@@ -660,7 +741,7 @@ export default function DevSecOpsPage() {
                 <div className="text-2xl font-extrabold text-cyan-600 dark:text-cyan-400 mt-1">
                   {audit.counts?.Medium || 0}
                 </div>
-                <div className="text-[11px] text-muted mt-0.5">Configuration defects</div>
+                <div className="text-[11px] text-muted mt-0.5">Word mentions</div>
               </div>
 
               <div className="p-4 rounded-xl border border-slate-500/20 bg-slate-500/10">
@@ -668,13 +749,13 @@ export default function DevSecOpsPage() {
                 <div className="text-2xl font-extrabold text-slate-600 dark:text-slate-400 mt-1">
                   {audit.counts?.Low || 0}
                 </div>
-                <div className="text-[11px] text-muted mt-0.5">Best practice & info</div>
+                <div className="text-[11px] text-muted mt-0.5">Word mentions</div>
               </div>
             </div>
 
             {/* Risk Graph Track */}
             <div className="p-4 border border-border rounded-lg bg-background space-y-3">
-              <div className="text-xs font-mono uppercase text-muted">Risk Profile Graph</div>
+              <div className="text-xs font-mono uppercase text-muted">Severity Word Mentions</div>
               <div className="space-y-2.5">
                 {[
                   { label: "Critical", count: audit.counts?.Critical || 0, color: "bg-red-500" },
