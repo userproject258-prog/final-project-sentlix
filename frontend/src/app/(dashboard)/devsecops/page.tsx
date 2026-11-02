@@ -87,6 +87,7 @@ export default function DevSecOpsPage() {
   const [mode, setMode] = useState<"guided" | "all">("guided");
   const [provider, setProvider] = useState("gemini");
   const [loading, setLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("Overview");
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -94,15 +95,16 @@ export default function DevSecOpsPage() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/devsecops/audit/status`);
-      if (res.ok) {
-        const data = await res.json();
-        setAudit(data);
-        if (data.target) {
-          setTarget((prev) => (prev ? prev : data.target));
-        }
+      if (!res.ok) throw new Error("Audit status unavailable");
+      const data = await res.json();
+      setAudit(data);
+      setConnectionError(false);
+      if (data.target) {
+        setTarget((prev) => (prev ? prev : data.target));
       }
     } catch (err) {
       console.error("Failed to fetch audit status:", err);
+      setConnectionError(true);
     }
     try {
       const response = await fetch(`${API_URL}/api/devsecops/findings`);
@@ -283,34 +285,6 @@ export default function DevSecOpsPage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
-      <section className="bg-surface border border-border rounded-xl p-6 space-y-3">
-        <h2 className="text-lg font-semibold">Pipeline security checks</h2>
-        <p className="text-sm text-muted">Checks run against this backend environment. Container checks inspect configuration; they do not scan a built image.</p>
-        {pipelineRuns.length === 0 && <p className="text-sm text-muted">No pipeline runs recorded.</p>}
-        {pipelineRuns.slice(0, 5).map((run) => (
-          <div key={run.id} className="border-t border-border pt-3 text-sm space-y-1">
-            <p className="font-semibold">{run.id} · {run.status} · {new Date(run.time).toLocaleString()}</p>
-            <p>SAST: {run.sast_status} · Secrets: {run.secret_status} · Python dependencies: {run.dependency_status} · Container configuration: {run.container_status}</p>
-            {run.details?.dependencies?.vulnerabilities?.map((v, index) => (
-              <p key={`${v.package}-${v.id}-${index}`} className="text-red-700">{v.package} {v.version}: {v.id} · Fix versions: {v.fix_versions?.join(", ") || "not listed"}</p>
-            ))}
-          </div>
-        ))}
-      </section>
-      <section className="bg-surface border border-border rounded-xl p-6 space-y-3">
-        <h2 className="text-lg font-semibold">Recorded audit observations</h2>
-        <p className="text-sm text-muted">HTTP header, certificate, and input-test observations from completed stages. Injection signals are candidates that require manual validation.</p>
-        {findings.length === 0 && <p className="text-sm text-muted">No structured observations recorded yet.</p>}
-        {findings.map((finding) => (
-          <div key={finding.id} className="border-t border-border pt-3 text-sm">
-            <p className="font-semibold">{finding.title} <span className="text-muted">· {finding.severity} · {finding.status}</span></p>
-            <p className="text-muted break-all">{finding.target}</p>
-            <p>{finding.evidence}</p>
-            <p className="text-muted">{finding.recommendation}</p>
-            {finding.status === "Open" && <button onClick={() => resolveFinding(finding)} className="mt-2 text-primary underline">Mark resolved for this target</button>}
-          </div>
-        ))}
-      </section>
       {/* Hero Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/40 pb-6">
         <div>
@@ -353,6 +327,8 @@ export default function DevSecOpsPage() {
         </div>
       </div>
 
+      {connectionError && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Unable to refresh audit status. The information shown may be out of date. <button onClick={fetchStatus} className="font-semibold underline">Retry</button></div>}
+
       {/* Error Banner if Audit Failed or Errored */}
       {audit?.error && (
         <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-between gap-4">
@@ -392,12 +368,13 @@ export default function DevSecOpsPage() {
 
           <form onSubmit={handleLaunch} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
+              <label htmlFor="audit-target" className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
                 Target Domain, IP, or URL
               </label>
               <div className="relative">
                 <input
                   type="text"
+                  id="audit-target"
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   placeholder="https://app.example.com or 192.168.1.1"
@@ -410,10 +387,11 @@ export default function DevSecOpsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
+                <label htmlFor="audit-provider" className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
                   AI Provider
                 </label>
                 <select
+                  id="audit-provider"
                   value={provider}
                   onChange={(e) => setProvider(e.target.value)}
                   disabled={isRunning}
@@ -698,6 +676,34 @@ export default function DevSecOpsPage() {
         </div>
       )}
 
+      <details className="bg-surface border border-border rounded-xl p-6 space-y-3">
+        <summary className="text-lg font-semibold cursor-pointer">Pipeline security checks ({pipelineRuns.length})</summary>
+        <p className="text-sm text-muted">Checks run against this backend environment. Container checks inspect configuration; they do not scan a built image.</p>
+        {pipelineRuns.length === 0 && <p className="text-sm text-muted">No pipeline runs recorded.</p>}
+        {pipelineRuns.slice(0, 5).map((run) => (
+          <div key={run.id} className="border-t border-border pt-3 text-sm space-y-1">
+            <p className="font-semibold">{run.id} · {run.status} · {new Date(run.time).toLocaleString()}</p>
+            <p>SAST: {run.sast_status} · Secrets: {run.secret_status} · Python dependencies: {run.dependency_status} · Container configuration: {run.container_status}</p>
+            {run.details?.dependencies?.vulnerabilities?.map((v, index) => (
+              <p key={`${v.package}-${v.id}-${index}`} className="text-red-700">{v.package} {v.version}: {v.id} · Fix versions: {v.fix_versions?.join(", ") || "not listed"}</p>
+            ))}
+          </div>
+        ))}
+      </details>
+      <details className="bg-surface border border-border rounded-xl p-6 space-y-3">
+        <summary className="text-lg font-semibold cursor-pointer">Recorded audit observations ({findings.length})</summary>
+        <p className="text-sm text-muted">HTTP header, certificate, and input-test observations from completed stages. Injection signals are candidates that require manual validation.</p>
+        {findings.length === 0 && <p className="text-sm text-muted">No structured observations recorded yet.</p>}
+        {findings.map((finding) => (
+          <div key={finding.id} className="border-t border-border pt-3 text-sm">
+            <p className="font-semibold">{finding.title} <span className="text-muted">· {finding.severity} · {finding.status}</span></p>
+            <p className="text-muted break-all">{finding.target}</p>
+            <p>{finding.evidence}</p>
+            <p className="text-muted">{finding.recommendation}</p>
+            {finding.status === "Open" && <button onClick={() => resolveFinding(finding)} className="mt-2 text-primary underline">Mark resolved for this target</button>}
+          </div>
+        ))}
+      </details>
       {/* Findings Desk & Risk Breakdown */}
       {audit?.report ? (
         <div className="space-y-6">

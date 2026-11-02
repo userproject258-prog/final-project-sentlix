@@ -18,18 +18,21 @@ interface AlertData {
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [lastNotification, setLastNotification] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const fetchAlerts = () => {
     fetch(`${API_URL}/api/alerts`)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Could not load alerts"); return res.json(); })
       .then((data) => {
         setAlerts(data.alerts);
+        setError("");
         setLoading(false);
       })
-      .catch(console.error);
+      .catch(() => { setError("Could not load alerts. Check the backend connection."); setLoading(false); });
   };
 
   useEffect(() => {
@@ -94,12 +97,14 @@ export default function AlertsPage() {
   }, []);
 
   const resolveAlert = (id: string) => {
+    setResolvingId(id);
     fetch(`${API_URL}/api/alerts/resolve/${encodeURIComponent(id)}`, { method: "POST" })
       .then((response) => {
         if (!response.ok) throw new Error("Could not resolve alert");
         setAlerts(prev => prev.map(a => a.id === id ? { ...a, status: "Resolved" } : a));
       })
-      .catch(console.error);
+      .catch(() => setError("Could not resolve the alert. Please try again."))
+      .finally(() => setResolvingId(null));
   };
 
   if (loading) return <div className="p-8 text-center text-muted">Loading alert center...</div>;
@@ -118,7 +123,7 @@ export default function AlertsPage() {
           <p className="text-xs text-muted mt-1">Real-time event-driven incident broadcast & SOC notifications</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-surface">
             <Radio className={`w-3.5 h-3.5 ${wsConnected ? "text-emerald-500 animate-pulse" : "text-gray-400"}`} />
             <span className={wsConnected ? "text-emerald-600" : "text-gray-500"}>
@@ -152,8 +157,10 @@ export default function AlertsPage() {
         </div>
       )}
 
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error} <button onClick={fetchAlerts} className="ml-2 font-semibold underline">Retry</button></div>}
+
       <div className="bg-surface border border-sentinel rounded-xl shadow-xs overflow-hidden">
-        {alerts.length === 0 ? (
+        {alerts.length === 0 && !error ? (
           <div className="p-8 text-center text-muted">No security alerts logged.</div>
         ) : (
           <div className="divide-y divide-border">
@@ -166,7 +173,7 @@ export default function AlertsPage() {
                     {alert.severity.toLowerCase() === "medium" && <div className="w-3 h-3 rounded-full bg-blue-500"></div>}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-foreground">{alert.title}</h3>
                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
                         alert.severity.toLowerCase() === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
@@ -175,7 +182,7 @@ export default function AlertsPage() {
                       </span>
                     </div>
                     <p className="text-xs text-muted mt-1 max-w-2xl leading-relaxed">{alert.message}</p>
-                    <div className="flex items-center gap-4 mt-2 text-[11px] text-muted font-medium">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-muted font-medium break-all">
                       <span className="flex items-center gap-1 font-mono"><Clock className="w-3 h-3"/> {new Date(alert.time).toLocaleTimeString()}</span>
                       <span className="uppercase tracking-wider font-mono">Source: {alert.source}</span>
                       <span className="uppercase tracking-wider font-mono text-gray-400">ID: {alert.id}</span>
@@ -186,9 +193,10 @@ export default function AlertsPage() {
                   {alert.status === "Active" ? (
                     <button 
                       onClick={() => resolveAlert(alert.id)}
-                      className="px-3.5 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors shadow-xs"
+                      disabled={resolvingId !== null}
+                      className="px-3.5 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors shadow-xs disabled:opacity-50"
                     >
-                      Resolve Incident
+                      {resolvingId === alert.id ? "Resolving…" : "Resolve alert"}
                     </button>
                   ) : (
                     <span className="flex items-center gap-1 text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">

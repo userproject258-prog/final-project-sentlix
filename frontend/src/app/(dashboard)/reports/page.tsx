@@ -16,16 +16,19 @@ interface Report {
 export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${API_URL}/api/reports`)
       .then(res => { if (!res.ok) throw new Error("Could not load reports"); return res.json(); })
       .then(data => setReports(data.reports))
-      .catch(() => setError("Could not load reports. Check the backend connection."));
+      .catch(() => setError("Could not load reports. Check the backend connection."))
+      .finally(() => setLoading(false));
   }, []);
 
   const downloadReport = async (report: Report) => {
     try {
+      setError("");
       const response = await fetch(`${API_URL}/api/reports/${encodeURIComponent(report.id)}`);
       if (!response.ok) throw new Error("Download failed");
       const data = await response.json();
@@ -51,7 +54,8 @@ export default function ReportsPage() {
       </div>
 
       {error && <p role="alert" className="text-red-600">{error}</p>}
-      {!error && reports.length === 0 && <p className="text-muted">No saved audit reports yet. Run an audit to create one.</p>}
+      {loading && <p className="text-muted" role="status">Loading reports…</p>}
+      {!loading && !error && reports.length === 0 && <p className="text-muted">No saved audit reports yet. Run an audit to create one.</p>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {reports.map(report => (
@@ -65,7 +69,7 @@ export default function ReportsPage() {
               </span>
             </div>
             <h3 className="font-bold text-foreground mb-1">{report.name}</h3>
-            <p className="text-sm text-muted mb-6">Generated on {report.date}</p>
+            <p className="text-sm text-muted mb-6">Generated on {new Date(report.date).toLocaleString()}</p>
             
             <button onClick={() => downloadReport(report)} className="w-full border border-border text-foreground hover:bg-gray-50 font-medium text-sm px-4 py-2 rounded flex justify-center items-center gap-2 transition-colors">
               <Download className="w-4 h-4" /> Download Markdown

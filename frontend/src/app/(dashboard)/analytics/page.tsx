@@ -42,14 +42,16 @@ const COLORS = {
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/api/analytics`)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Could not load analytics"); return res.json(); })
       .then((json) => setData(json))
-      .catch(console.error);
+      .catch(() => setError(true));
   }, []);
 
+  if (error) return <div className="p-8 text-center" role="alert"><p className="text-muted">Could not load analytics. Check the backend connection.</p><button className="mt-3 text-primary underline" onClick={() => window.location.reload()}>Try again</button></div>;
   if (!data) return <div className="p-8 text-center text-muted">Loading analytics data...</div>;
 
   return (
@@ -86,6 +88,9 @@ export default function AnalyticsPage() {
         <div className="bg-surface border-sentinel p-5 rounded-lg shadow-sm">
           <h2 className="text-lg font-semibold mb-4 text-foreground">Severity Distribution</h2>
           <div className="h-[300px] w-full">
+            {data.severity_distribution.every((item) => item.value === 0) ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted">No threat events recorded yet.</div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -107,6 +112,7 @@ export default function AnalyticsPage() {
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+            )}
           </div>
           
           <div className="mt-6 pt-6 border-t border-border">

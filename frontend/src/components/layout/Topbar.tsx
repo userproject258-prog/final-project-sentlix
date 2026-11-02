@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
-import { Bell, Search, User, LogOut } from "lucide-react";
+import { Bell, User, LogOut } from "lucide-react";
 import { API_URL, apiFetch } from "@/lib/api";
 
 function subscribeUser(callback: () => void) {
@@ -40,27 +40,13 @@ export function Topbar() {
   };
 
   return (
-    <header className="h-14 bg-surface border-b border-border flex items-center justify-between px-6 flex-shrink-0">
-      <div className="flex items-center gap-4 flex-1">
-        <div className="relative w-64">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            type="text"
-            placeholder="Search assets, IPs..."
-            className="w-full pl-9 pr-4 py-1.5 text-sm border-sentinel rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-          />
-        </div>
-      </div>
+    <header className="h-14 bg-surface flex items-center justify-between px-3 sm:px-6 flex-shrink-0">
+      <p className="text-sm font-semibold text-foreground">Security workspace</p>
       
       <div className="flex items-center gap-4">
-        <div className="text-xs font-mono text-muted bg-background border-sentinel px-2 py-1 rounded-md hidden md:block">
-          Production-AWS-us-east-1
-        </div>
-        
-        <button className="relative p-2 text-muted hover:text-foreground transition-colors" title="Notifications">
+        <Link href="/alerts" aria-label="View alerts" className="relative p-2 text-muted hover:text-foreground transition-colors" title="Alerts">
           <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-critical rounded-full border border-surface"></span>
-        </button>
+        </Link>
         
         <div className="flex items-center gap-2 border-l border-border pl-4">
           <Link href="/settings" className="flex items-center gap-2 hover:opacity-80 transition-opacity">

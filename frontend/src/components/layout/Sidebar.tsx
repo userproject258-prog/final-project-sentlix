@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ShieldAlert,
   Activity,
@@ -10,7 +13,7 @@ import {
   Shield
 } from "lucide-react";
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-border flex-shrink-0">
       <div className="h-14 flex items-center px-4 font-bold text-lg border-b border-border/10 tracking-tight gap-2">
@@ -18,7 +21,7 @@ export function Sidebar() {
         SENTINELX
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+      <nav aria-label="Main navigation" onClick={onNavigate} className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
         <div>
           <div className="text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider mb-2 px-3">
             Overview
@@ -75,10 +78,13 @@ export function Sidebar() {
 }
 
 function NavItem({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  const pathname = usePathname();
+  const active = pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-sidebar-foreground/10 transition-colors"
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary ${active ? "bg-primary/10 text-primary" : "hover:bg-sidebar-foreground/10"}`}
     >
       <div className="w-4 h-4 flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4">
         {icon}
