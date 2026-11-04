@@ -684,16 +684,93 @@ async def get_audit_logs():
         ]
     }
 
+_INTEGRATIONS_STATE = [
+    {"id": "aws", "name": "Amazon Web Services (AWS)", "category": "Cloud CSPM", "account": "arn:aws:iam::891377045120", "region": "us-east-1", "status": "Connected", "last_sync": "10 mins ago"},
+    {"id": "gcp", "name": "Google Cloud Platform", "category": "Cloud Security", "account": "sentinelx-prod-gcp", "region": "us-central1", "status": "Connected", "last_sync": "1 hour ago"},
+    {"id": "github", "name": "GitHub Actions & Webhooks", "category": "DevSecOps CI/CD", "account": "final-project-sentlix", "region": "Global", "status": "Connected", "last_sync": "Active"},
+    {"id": "slack", "name": "Slack SOC Alert Channel", "category": "Incident Response", "account": "#secops-critical-alerts", "region": "Webhook", "status": "Connected", "last_sync": "Active"},
+    {"id": "azure", "name": "Microsoft Azure Defender", "category": "Cloud CSPM", "account": "Not configured", "region": "westeurope", "status": "Disconnected", "last_sync": "N/A"},
+]
+
+class AIKeyUpdateRequest(BaseModel):
+    api_key: str
+
+class IntegrationToggleRequest(BaseModel):
+    name: str
+    action: Literal["toggle", "sync"] = "toggle"
+
+class ProfileUpdateRequest(BaseModel):
+    name: str
+
 @app.get("/api/settings")
-async def get_settings():
+async def get_settings(request: Request, session: Session = Depends(get_session)):
+    k = get_gemini_api_key()
+    is_valid = validate_gemini_api_key(k)
+    masked = f"{k[:4]}••••••••••••{k[-4:]}" if len(k) > 10 else ("Configured" if k else "Not Set")
+    user = session.get(User, getattr(request.state, "user_id", None))
+    active_sessions = session.exec(select(AuthSession).where(AuthSession.user_id == user.id)).all() if user else []
     return {
-        "integrations": [
-            {"name": "AWS", "status": "Connected", "last_sync": "10 mins ago"},
-            {"name": "Google Cloud", "status": "Connected", "last_sync": "1 hour ago"},
-            {"name": "Azure", "status": "Disconnected", "last_sync": "N/A"},
-            {"name": "Slack", "status": "Connected", "last_sync": "Active"},
-        ]
+        "integrations": _INTEGRATIONS_STATE,
+        "ai_config": {
+            "configured": is_valid,
+            "key_present": bool(k),
+            "masked_key": masked,
+            "engine": "Google gemini-2.5-flash" if is_valid else "Local recorded-data summary",
+            "model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        },
+        "user": {
+            "id": user.id if user else 1,
+            "name": user.name if user else "Security Administrator",
+            "email": user.email if user else "admin@sentinelx.io",
+            "role": "Lead Security Administrator",
+            "created_at": user.created_at.isoformat() if user and user.created_at else None,
+            "active_sessions": len(active_sessions) or 1,
+        }
     }
+
+@app.post("/api/settings/ai-key")
+async def update_ai_key(req: AIKeyUpdateRequest):
+    clean_key = req.api_key.strip()
+    os.environ["GEMINI_API_KEY"] = clean_key
+    is_valid = validate_gemini_api_key(clean_key)
+    masked = f"{clean_key[:4]}••••••••••••{clean_key[-4:]}" if len(clean_key) > 10 else ("Configured" if clean_key else "Not Set")
+    return {
+        "status": "success",
+        "configured": is_valid,
+        "masked_key": masked,
+        "engine": "Google gemini-2.5-flash" if is_valid else "Local recorded-data summary",
+    }
+
+@app.post("/api/settings/integrations")
+async def update_integration(req: IntegrationToggleRequest):
+    for item in _INTEGRATIONS_STATE:
+        if item["name"] == req.name or item["id"] == req.name:
+            if req.action == "sync":
+                item["last_sync"] = "Just now"
+                item["status"] = "Connected"
+            else:
+                if item["status"] == "Connected":
+                    item["status"] = "Disconnected"
+                    item["last_sync"] = "Paused"
+                else:
+                    item["status"] = "Connected"
+                    item["last_sync"] = "Just now"
+            return {"status": "success", "integration": item, "integrations": _INTEGRATIONS_STATE}
+    raise HTTPException(status_code=404, detail="Integration not found")
+
+@app.put("/api/auth/profile")
+async def update_profile(req: ProfileUpdateRequest, request: Request, session: Session = Depends(get_session)):
+    user = session.get(User, getattr(request.state, "user_id", None))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    clean_name = req.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    user.name = clean_name
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {"status": "success", "user": {"id": user.id, "name": user.name, "email": user.email}}
 
 @app.get("/api/alerts")
 async def get_alerts(session: Session = Depends(get_session)):
