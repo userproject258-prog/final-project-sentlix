@@ -97,6 +97,14 @@ def validate_gemini_api_key(key: Optional[str] = None) -> bool:
         return False
     try:
         import httpx
+        if api_key.startswith("AQ."):
+            response = httpx.post(
+                "https://aiplatform.googleapis.com/v1beta1/publishers/google/models/gemini-2.5-flash:generateContent",
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json={"contents": [{"role": "user", "parts": [{"text": "ping"}]}], "generationConfig": {"maxOutputTokens": 1}},
+                timeout=8.0,
+            )
+            return response.status_code == 200
         response = httpx.get(
             "https://generativelanguage.googleapis.com/v1beta/models",
             params={"key": api_key, "pageSize": 1},
@@ -115,23 +123,50 @@ def query_assistant(prompt: str, session: Optional[Session] = None, history: Opt
         context = {"available": False}
     key = get_gemini_api_key()
     if key:
-        try:
-            import httpx
-            model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
-            history_data = [{"role": x.get("role"), "content": str(x.get("content", ""))[:4000]}
-                            for x in (history or [])[-8:] if x.get("role") in ("user", "assistant")]
-            payload = {"system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-                       "contents": [{"role": "user", "parts": [{"text": json.dumps({
-                           "recorded_context": context, "conversation": history_data, "current_question": prompt
-                       }, ensure_ascii=False)}]}], "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048}}
-            response = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                                  params={"key": key}, json=payload, timeout=20.0)
-            response.raise_for_status()
-            data = response.json()
-            text = "\n".join(part.get("text", "") for part in data["candidates"][0]["content"]["parts"]).strip()
-            if text:
-                return {"response": text, "engine": f"Google {model}", "context_injected": context.get("available", False), "api_key_configured": True}
-        except Exception as exc:
-            logger.warning("Assistant provider request failed: %s", type(exc).__name__)
+        history_data = [{"role": x.get("role"), "content": str(x.get("content", ""))[:4000]}
+                        for x in (history or [])[-8:] if x.get("role") in ("user", "assistant")]
+        prompt_text = json.dumps({
+            "recorded_context": context, "conversation": history_data, "current_question": prompt
+        }, ensure_ascii=False)
+        is_vertex_key = key.startswith("AQ.")
+        default_model = "gemini-2.5-flash" if is_vertex_key else "gemini-flash-latest"
+        candidate_models = [os.getenv("GEMINI_MODEL", default_model), "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
+        seen = set()
+        models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+
+        for model in models_to_try:
+            try:
+                from google import genai
+                client = genai.Client(vertexai=is_vertex_key, api_key=key)
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=prompt_text,
+                    config={"system_instruction": SYSTEM_PROMPT, "temperature": 0.2, "max_output_tokens": 2048},
+                )
+                if resp and resp.text and resp.text.strip():
+                    return {"response": resp.text.strip(), "engine": f"Google {model}", "context_injected": context.get("available", False), "api_key_configured": True}
+            except Exception as exc:
+                logger.warning("Assistant SDK request failed for %s: %s", model, exc)
+
+            try:
+                import httpx
+                payload = {
+                    "systemInstruction" if is_vertex_key else "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                    "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
+                }
+                if is_vertex_key:
+                    url = f"https://aiplatform.googleapis.com/v1beta1/publishers/google/models/{model}:generateContent"
+                    response = httpx.post(url, headers={"x-goog-api-key": key}, json=payload, timeout=20.0)
+                else:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                    response = httpx.post(url, params={"key": key}, json=payload, timeout=20.0)
+                response.raise_for_status()
+                data = response.json()
+                text = "\n".join(part.get("text", "") for part in data["candidates"][0]["content"]["parts"]).strip()
+                if text:
+                    return {"response": text, "engine": f"Google {model}", "context_injected": context.get("available", False), "api_key_configured": True}
+            except Exception as exc:
+                logger.warning("Assistant REST request failed for %s: %s", model, type(exc).__name__)
     return {"response": _local_response(context, bool(key)), "engine": "Local recorded-data summary",
             "context_injected": context.get("available", False), "api_key_configured": False}

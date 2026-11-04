@@ -297,13 +297,14 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
     if not api_key:
         return ""
 
-    candidate_models = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest"]
+    candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
+    is_vertex_key = api_key.startswith("AQ.")
     
     # Method 1: SDK
     for model_name in candidate_models:
         try:
             from google import genai
-            client = genai.Client(api_key=api_key)
+            client = genai.Client(vertexai=is_vertex_key, api_key=api_key)
             resp = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -318,12 +319,16 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
     import httpx
     for model_name in candidate_models:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
             payload = {
                 "contents": [{"role": "user", "parts": [{"text": f"{system_prompt}\n\n{prompt}"}]}],
                 "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048}
             }
-            res = httpx.post(url, json=payload, timeout=15.0)
+            if is_vertex_key:
+                url = f"https://aiplatform.googleapis.com/v1beta1/publishers/google/models/{model_name}:generateContent"
+                res = httpx.post(url, headers={"x-goog-api-key": api_key}, json=payload, timeout=15.0)
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                res = httpx.post(url, json=payload, timeout=15.0)
             if res.status_code == 200:
                 candidates = res.json().get("candidates", [])
                 if candidates:
