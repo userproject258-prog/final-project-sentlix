@@ -18,7 +18,18 @@ else:
 def init_db():
     # Explicitly import all models so SQLModel registers table schemas
     import app.models.core  # noqa: F401
+    from sqlalchemy import text
     SQLModel.metadata.create_all(engine)
+    # Safely migrate existing tables with any new columns
+    for stmt in (
+        "ALTER TABLE threatevent ADD COLUMN destination VARCHAR",
+        "ALTER TABLE threatevent ADD COLUMN confidence FLOAT",
+    ):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception:
+            pass
 
 
 def get_session():

@@ -10,6 +10,8 @@ class ThreatEvent(SQLModel, table=True):
     time: datetime = Field(default_factory=utc_now)
     type: str
     source: str
+    destination: Optional[str] = Field(default="10.0.1.50:443")
+    confidence: Optional[float] = Field(default=None)
     severity: str
     status: str
 

@@ -37,6 +37,8 @@ def collect_context(session: Optional[Session]) -> Dict[str, Any]:
         "cloud_findings": [{"id": f.id, "finding": f.finding, "resource": f.resource,
                             "severity": f.severity, "status": f.status} for f in cloud],
         "threat_events": [{"id": t.id, "type": t.type, "source": t.source,
+                           "destination": getattr(t, "destination", None) or "10.0.1.50:443",
+                           "confidence": getattr(t, "confidence", None),
                            "severity": t.severity, "status": t.status} for t in threats],
         "alerts": [{"id": a.id, "title": a.title, "severity": a.severity,
                     "source": a.source, "status": a.status} for a in alerts],

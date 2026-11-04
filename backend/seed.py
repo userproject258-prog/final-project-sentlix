@@ -32,10 +32,10 @@ def seed():
         # Seed Threat Events
         now = datetime.now(timezone.utc)
         events = [
-            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=5), type="SQL Injection", source="45.33.12.9", severity="CRITICAL", status="Open"),
-            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=18), type="Port Scan", source="10.0.0.45", severity="HIGH", status="Investigate"),
-            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=45), type="Anomaly", source="192.168.1.100", severity="MEDIUM", status="Open"),
-            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=120), type="Brute Force", source="External", severity="CRITICAL", status="Resolved"),
+            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=5), type="SQL Injection", source="45.33.12.9", destination="10.0.1.100:443", confidence=0.984, severity="CRITICAL", status="Open"),
+            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=18), type="Port Scan", source="10.0.0.45", destination="10.0.1.0/24", confidence=0.942, severity="HIGH", status="Investigate"),
+            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=45), type="Anomaly", source="192.168.1.100", destination="10.0.1.50:443", confidence=0.895, severity="MEDIUM", status="Open"),
+            ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=120), type="Brute Force", source="External", destination="10.0.1.50:22", confidence=0.968, severity="CRITICAL", status="Resolved"),
         ]
         session.add_all(events)
         
