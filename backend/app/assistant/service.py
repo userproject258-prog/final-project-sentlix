@@ -85,6 +85,8 @@ def get_gemini_api_key() -> str:
     _load_env_if_needed()
     return (
         os.getenv("GEMINI_API_KEY")
+        or os.getenv("GROQ_API_KEY")
+        or os.getenv("XAI_API_KEY")
         or os.getenv("GOOGLE_API_KEY")
         or os.getenv("GOOGLE_GENAI_API_KEY")
         or ""
@@ -97,6 +99,20 @@ def validate_gemini_api_key(key: Optional[str] = None) -> bool:
         return False
     try:
         import httpx
+        if api_key.startswith("gsk_"):
+            response = httpx.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=5.0,
+            )
+            return response.status_code == 200
+        if api_key.startswith("xai-"):
+            response = httpx.get(
+                "https://api.x.ai/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=5.0,
+            )
+            return response.status_code == 200
         if api_key.startswith("AQ."):
             response = httpx.post(
                 "https://aiplatform.googleapis.com/v1beta1/publishers/google/models/gemini-2.5-flash:generateContent",
@@ -128,6 +144,41 @@ def query_assistant(prompt: str, session: Optional[Session] = None, history: Opt
         prompt_text = json.dumps({
             "recorded_context": context, "conversation": history_data, "current_question": prompt
         }, ensure_ascii=False)
+
+        if key.startswith("gsk_") or key.startswith("xai-"):
+            import httpx
+            is_groq = key.startswith("gsk_")
+            base_url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else "https://api.x.ai/v1/chat/completions"
+            models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if is_groq else ["grok-2-latest", "grok-beta"]
+            for model in models_to_try:
+                try:
+                    response = httpx.post(
+                        base_url,
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model,
+                            "messages": [
+                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt_text},
+                            ],
+                            "temperature": 0.2,
+                            "max_tokens": 2048,
+                        },
+                        timeout=20.0,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    text = data["choices"][0]["message"]["content"].strip()
+                    if text:
+                        return {
+                            "response": text,
+                            "engine": "Google gemini-2.5-flash",
+                            "context_injected": context.get("available", False),
+                            "api_key_configured": True,
+                        }
+                except Exception as exc:
+                    logger.warning("Assistant OpenAI-compatible request failed for %s: %s", model, exc)
+
         is_vertex_key = key.startswith("AQ.")
         default_model = "gemini-2.5-flash" if is_vertex_key else "gemini-flash-latest"
         candidate_models = [os.getenv("GEMINI_MODEL", default_model), "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]

@@ -289,6 +289,8 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
 
     api_key = (
         os.getenv("GEMINI_API_KEY") 
+        or os.getenv("GROQ_API_KEY")
+        or os.getenv("XAI_API_KEY")
         or os.getenv("GOOGLE_API_KEY") 
         or os.getenv("GOOGLE_GENAI_API_KEY") 
         or ""
@@ -296,6 +298,34 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
     
     if not api_key:
         return ""
+
+    if api_key.startswith("gsk_") or api_key.startswith("xai-"):
+        import httpx
+        is_groq = api_key.startswith("gsk_")
+        base_url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else "https://api.x.ai/v1/chat/completions"
+        models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if is_groq else ["grok-2-latest", "grok-beta"]
+        for model_name in models_to_try:
+            try:
+                res = httpx.post(
+                    base_url,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model_name,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 2048,
+                    },
+                    timeout=20.0,
+                )
+                if res.status_code == 200:
+                    text = res.json()["choices"][0]["message"]["content"].strip()
+                    if text:
+                        return clean_report_markdown(text)
+            except Exception:
+                continue
 
     candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
     is_vertex_key = api_key.startswith("AQ.")
