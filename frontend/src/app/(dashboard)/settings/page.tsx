@@ -137,27 +137,8 @@ export default function SettingsPage() {
   };
 
   const loadSettings = async () => {
+    setLoading(true);
     try {
-      // Load local user fallback immediately if available
-      if (typeof window !== "undefined") {
-        const storedUser = localStorage.getItem("sentinelx_user");
-        if (storedUser) {
-          try {
-            const parsed = JSON.parse(storedUser);
-            if (parsed.name || parsed.email) {
-              setUserProfile((prev) => ({
-                ...prev,
-                name: parsed.name || prev.name,
-                email: parsed.email || prev.email,
-              }));
-              setEditName(parsed.name || "");
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }
-
       const res = await fetch(`${API_URL}/api/settings`);
       if (res.ok) {
         const data = await res.json();
@@ -180,7 +161,30 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    loadSettings();
+    let isCancelled = false;
+    fetch(`${API_URL}/api/settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isCancelled && data) {
+          if (Array.isArray(data.integrations)) {
+            setIntegrations(data.integrations);
+          }
+          if (data.ai_config) {
+            setAiConfig(data.ai_config);
+          }
+          if (data.user) {
+            setUserProfile(data.user);
+            setEditName(data.user.name);
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to fetch settings:", err))
+      .finally(() => {
+        if (!isCancelled) setLoading(false);
+      });
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const copyText = (text: string, id: string) => {
