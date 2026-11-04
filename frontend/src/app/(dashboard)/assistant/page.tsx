@@ -108,18 +108,335 @@ export default function AssistantPage() {
     { label: "Remediation plan", query: "Create a remediation plan based on the recorded audit evidence." }
   ];
 
-  const renderMessageContent = (content: string) => {
-    const parts = content.split(/(```[\s\S]*?```)/g);
-    
-    return parts.map((part, index) => {
-      if (part.startsWith('```') && part.endsWith('```')) {
-        const lines = part.split('\n');
-        const lang = lines[0].replace('```', '').trim() || 'code';
-        const code = lines.slice(1, -1).join('\n');
-        
+  const renderInlineContent = (text: string, keyPrefix: string, isUser: boolean = false) => {
+    const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    return tokens.map((token, idx) => {
+      if (token.startsWith("`") && token.endsWith("`") && token.length > 2) {
+        const inner = token.slice(1, -1);
         return (
-          <div key={index} className="my-3 rounded-lg overflow-hidden border border-gray-800 bg-[#0d1117] text-gray-200">
-            <div className="flex items-center justify-between px-3 py-1.5 bg-[#161b22] border-b border-gray-800 text-xs font-mono text-gray-400">
+          <code
+            key={`${keyPrefix}-code-${idx}`}
+            className={`px-1.5 py-0.5 mx-0.5 rounded font-mono text-[12px] border ${
+              isUser
+                ? "bg-white/15 text-white border-white/20"
+                : "bg-slate-100 text-indigo-700 border-slate-200/80"
+            }`}
+          >
+            {inner}
+          </code>
+        );
+      }
+      if (token.startsWith("**") && token.endsWith("**") && token.length > 4) {
+        const inner = token.slice(2, -2);
+        return (
+          <strong
+            key={`${keyPrefix}-bold-${idx}`}
+            className={`font-semibold ${isUser ? "text-white" : "text-gray-900"}`}
+          >
+            {inner}
+          </strong>
+        );
+      }
+      const badgeMatch = !isUser && token.trim().match(/^(CRITICAL|HIGH|MEDIUM|LOW|OPEN\/ACTIVE|OPEN|ACTIVE|PASS|FAIL)$/i);
+      if (badgeMatch) {
+        const val = badgeMatch[1].toUpperCase();
+        const badgeStyles: Record<string, string> = {
+          CRITICAL: "bg-red-100 text-red-800 border-red-200",
+          HIGH: "bg-orange-100 text-orange-800 border-orange-200",
+          MEDIUM: "bg-amber-100 text-amber-800 border-amber-200",
+          LOW: "bg-blue-50 text-blue-700 border-blue-200",
+          "OPEN/ACTIVE": "bg-rose-50 text-rose-700 border-rose-200",
+          OPEN: "bg-rose-50 text-rose-700 border-rose-200",
+          ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
+          PASS: "bg-emerald-50 text-emerald-700 border-emerald-200",
+          FAIL: "bg-red-100 text-red-800 border-red-200",
+        };
+        return (
+          <span
+            key={`${keyPrefix}-badge-${idx}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide border ${
+              badgeStyles[val] || "bg-gray-100 text-gray-700 border-gray-200"
+            }`}
+          >
+            {token.trim()}
+          </span>
+        );
+      }
+      return <span key={`${keyPrefix}-txt-${idx}`}>{token}</span>;
+    });
+  };
+
+  const isTableSeparator = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("|")) return false;
+    const cells = trimmed
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .map((c) => c.trim());
+    return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c));
+  };
+
+  const parseTableRow = (line: string) => {
+    const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+    return trimmed.split("|").map((c) => c.trim());
+  };
+
+  const renderMarkdownBlock = (blockText: string, blockIdx: number, isUser: boolean) => {
+    // Normalize spaced-out markdown table rows (e.g. blank lines between | rows |)
+    const rawLines = blockText.split("\n");
+    const lines: string[] = [];
+    for (let i = 0; i < rawLines.length; i++) {
+      const curr = rawLines[i];
+      if (!curr.trim()) {
+        const prevNonEmpty = lines.length > 0 ? lines[lines.length - 1].trim() : "";
+        let nextNonEmpty = "";
+        for (let j = i + 1; j < rawLines.length; j++) {
+          if (rawLines[j].trim()) {
+            nextNonEmpty = rawLines[j].trim();
+            break;
+          }
+        }
+        if (prevNonEmpty.startsWith("|") && nextNonEmpty.startsWith("|")) {
+          continue; // Collapse blank line inside a markdown table
+        }
+      }
+      lines.push(curr);
+    }
+
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        elements.push(<div key={`sp-${blockIdx}-${i}`} className="h-2" />);
+        i++;
+        continue;
+      }
+
+      // Horizontal Rule
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+        elements.push(
+          <hr
+            key={`hr-${blockIdx}-${i}`}
+            className={`my-4 border-t ${isUser ? "border-white/20" : "border-gray-200"}`}
+          />
+        );
+        i++;
+        continue;
+      }
+
+      // Markdown Table
+      if (trimmed.startsWith("|") && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+        const headers = parseTableRow(trimmed);
+        const colCount = Math.max(headers.length, 1);
+        i += 2; // Skip header and separator
+        const rows: string[][] = [];
+        while (i < lines.length && lines[i].trim().startsWith("|")) {
+          if (!isTableSeparator(lines[i])) {
+            rows.push(parseTableRow(lines[i]));
+          }
+          i++;
+        }
+
+        elements.push(
+          <div
+            key={`tbl-${blockIdx}-${i}`}
+            className="my-3.5 overflow-x-auto rounded-xl border border-gray-200 shadow-2xs bg-white"
+          >
+            <table className="w-full text-left border-collapse text-xs md:text-[13px]">
+              <thead>
+                <tr className="bg-slate-50/90 border-b border-gray-200 text-gray-700">
+                  {headers.map((h, hIdx) => (
+                    <th
+                      key={`th-${hIdx}`}
+                      className="py-2.5 px-3.5 font-semibold tracking-tight text-gray-800 whitespace-nowrap"
+                    >
+                      {renderInlineContent(h, `th-${blockIdx}-${i}-${hIdx}`, false)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((row, rIdx) => (
+                  <tr
+                    key={`tr-${rIdx}`}
+                    className="hover:bg-slate-50/60 transition-colors align-top"
+                  >
+                    {row.map((cell, cIdx) => {
+                      const spanCols =
+                        row.length < colCount && cIdx === row.length - 1
+                          ? colCount - cIdx
+                          : 1;
+                      return (
+                        <td
+                          key={`td-${cIdx}`}
+                          colSpan={spanCols > 1 ? spanCols : undefined}
+                          className={`py-2.5 px-3.5 text-gray-700 leading-relaxed ${
+                            cIdx === 0 ? "font-medium text-gray-900 whitespace-nowrap" : ""
+                          }`}
+                        >
+                          {renderInlineContent(cell, `td-${blockIdx}-${rIdx}-${cIdx}`, false)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+
+      // Headings
+      const headingMatch = trimmed.match(/^(#{1,4})\s+(.*)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const text = headingMatch[2];
+        if (level === 1) {
+          elements.push(
+            <h1
+              key={`h1-${blockIdx}-${i}`}
+              className={`text-lg font-bold mt-4 mb-2 ${isUser ? "text-white" : "text-gray-900"}`}
+            >
+              {renderInlineContent(text, `h1-${blockIdx}-${i}`, isUser)}
+            </h1>
+          );
+        } else if (level === 2) {
+          elements.push(
+            <h2
+              key={`h2-${blockIdx}-${i}`}
+              className={`text-[15px] font-bold mt-4 mb-2 pb-1.5 border-b flex items-center gap-2 ${
+                isUser
+                  ? "text-white border-white/20"
+                  : "text-slate-900 border-slate-200/80"
+              }`}
+            >
+              <span className="w-1.5 h-4 rounded-full bg-primary inline-block shrink-0" />
+              <span>{renderInlineContent(text, `h2-${blockIdx}-${i}`, isUser)}</span>
+            </h2>
+          );
+        } else if (level === 3) {
+          elements.push(
+            <h3
+              key={`h3-${blockIdx}-${i}`}
+              className={`text-sm font-bold mt-3 mb-1.5 ${isUser ? "text-white" : "text-gray-900"}`}
+            >
+              {renderInlineContent(text, `h3-${blockIdx}-${i}`, isUser)}
+            </h3>
+          );
+        } else {
+          elements.push(
+            <h4
+              key={`h4-${blockIdx}-${i}`}
+              className={`text-xs font-semibold uppercase tracking-wider mt-2.5 mb-1 ${
+                isUser ? "text-white/90" : "text-gray-700"
+              }`}
+            >
+              {renderInlineContent(text, `h4-${blockIdx}-${i}`, isUser)}
+            </h4>
+          );
+        }
+        i++;
+        continue;
+      }
+
+      // Unordered List
+      if (/^[-*•]\s+/.test(trimmed)) {
+        const items: string[] = [];
+        while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
+          items.push(lines[i].trim().replace(/^[-*•]\s+/, ""));
+          i++;
+        }
+        elements.push(
+          <ul key={`ul-${blockIdx}-${i}`} className="my-2 space-y-1.5 pl-4 list-disc marker:text-primary">
+            {items.map((item, idx) => (
+              <li
+                key={`li-${idx}`}
+                className={`text-sm leading-relaxed ${isUser ? "text-white" : "text-gray-700"}`}
+              >
+                {renderInlineContent(item, `ul-${blockIdx}-${i}-${idx}`, isUser)}
+              </li>
+            ))}
+          </ul>
+        );
+        continue;
+      }
+
+      // Ordered List
+      if (/^\d+\.\s+/.test(trimmed)) {
+        const items: string[] = [];
+        while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+          items.push(lines[i].trim().replace(/^\d+\.\s+/, ""));
+          i++;
+        }
+        elements.push(
+          <ol key={`ol-${blockIdx}-${i}`} className="my-2 space-y-1.5 pl-5 list-decimal marker:font-semibold marker:text-primary">
+            {items.map((item, idx) => (
+              <li
+                key={`oli-${idx}`}
+                className={`text-sm leading-relaxed ${isUser ? "text-white" : "text-gray-700"}`}
+              >
+                {renderInlineContent(item, `ol-${blockIdx}-${i}-${idx}`, isUser)}
+              </li>
+            ))}
+          </ol>
+        );
+        continue;
+      }
+
+      // Blockquote
+      if (trimmed.startsWith(">")) {
+        const quoteText = trimmed.replace(/^>\s*/, "");
+        elements.push(
+          <blockquote
+            key={`bq-${blockIdx}-${i}`}
+            className={`my-2.5 pl-3.5 py-1 border-l-3 italic text-sm ${
+              isUser
+                ? "border-white/50 text-white/90"
+                : "border-primary/60 bg-slate-50/70 text-gray-700 rounded-r-md"
+            }`}
+          >
+            {renderInlineContent(quoteText, `bq-${blockIdx}-${i}`, isUser)}
+          </blockquote>
+        );
+        i++;
+        continue;
+      }
+
+      // Regular Paragraph
+      elements.push(
+        <p
+          key={`p-${blockIdx}-${i}`}
+          className={`mb-2 text-sm leading-relaxed ${isUser ? "text-white" : "text-gray-700"}`}
+        >
+          {renderInlineContent(line, `p-${blockIdx}-${i}`, isUser)}
+        </p>
+      );
+      i++;
+    }
+
+    return <div key={blockIdx}>{elements}</div>;
+  };
+
+  const renderMessageContent = (content: string, isUser: boolean = false) => {
+    const parts = content.split(/(```[\s\S]*?```)/g);
+
+    return parts.map((part, index) => {
+      if (part.startsWith("```") && part.endsWith("```")) {
+        const lines = part.split("\n");
+        const lang = lines[0].replace("```", "").trim() || "code";
+        const code = lines.slice(1, -1).join("\n");
+
+        return (
+          <div
+            key={index}
+            className="my-3.5 rounded-xl overflow-hidden border border-gray-800 bg-[#0d1117] text-gray-200 shadow-xs"
+          >
+            <div className="flex items-center justify-between px-3.5 py-2 bg-[#161b22] border-b border-gray-800 text-xs font-mono text-gray-400">
               <span className="flex items-center gap-1.5">
                 <Terminal className="w-3.5 h-3.5 text-blue-400" />
                 {lang}
@@ -142,48 +459,14 @@ export default function AssistantPage() {
                 )}
               </button>
             </div>
-            <pre className="p-3 text-xs md:text-sm font-mono overflow-x-auto leading-relaxed text-emerald-300">
+            <pre className="p-3.5 text-xs md:text-sm font-mono overflow-x-auto leading-relaxed text-emerald-300">
               <code>{code}</code>
             </pre>
           </div>
         );
       }
-      
-      const formattedText = part
-        .split('\n')
-        .map((line, i) => {
-          if (!line.trim()) return <div key={`empty-${i}`} className="h-2" />;
-          
-          if (line.startsWith('### ')) {
-            return (
-              <h3 key={`h3-${i}`} className="text-base font-bold text-gray-900 mt-2 mb-1 flex items-center gap-1.5">
-                {line.replace('### ', '')}
-              </h3>
-            );
-          }
-          if (line.startsWith('#### ')) {
-            return (
-              <h4 key={`h4-${i}`} className="text-sm font-semibold text-gray-800 mt-2 mb-1">
-                {line.replace('#### ', '')}
-              </h4>
-            );
-          }
 
-          const boldedLine = line.split(/(\*\*.*?\*\*)/g).map((segment, j) => {
-            if (segment.startsWith('**') && segment.endsWith('**')) {
-              return <strong key={`bold-${j}`} className="font-semibold text-gray-900">{segment.slice(2, -2)}</strong>;
-            }
-            return <span key={`text-${j}`}>{segment}</span>;
-          });
-
-          return (
-            <p key={`p-${i}`} className="mb-1.5 text-sm leading-relaxed text-gray-700">
-              {boldedLine}
-            </p>
-          );
-        });
-
-      return <div key={index}>{formattedText}</div>;
+      return renderMarkdownBlock(part, index, isUser);
     });
   };
 
@@ -239,16 +522,35 @@ export default function AssistantPage() {
               {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
             
-            <div className={`max-w-[85%] rounded-2xl px-5 py-4 shadow-xs ${
+            <div className={`max-w-[92%] md:max-w-[88%] rounded-2xl px-5 py-4 shadow-xs ${
               msg.role === 'user' 
                 ? 'bg-primary text-white rounded-tr-none' 
                 : 'bg-white border border-gray-200/90 text-gray-800 rounded-tl-none'
             }`}>
-              {renderMessageContent(msg.content)}
+              {renderMessageContent(msg.content, msg.role === 'user')}
               {msg.engine && (
-                <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1 text-[11px] text-muted">
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span>Powered by {msg.engine}</span>
+                <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2 text-[11px] text-muted">
+                  <span className="flex items-center gap-1.5 font-medium text-slate-500">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Powered by {msg.engine}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(msg.content, Number(msg.id.replace(/\D/g, "")) || 999)}
+                    className="flex items-center gap-1 text-slate-400 hover:text-slate-700 transition-colors"
+                  >
+                    {copiedIndex === (Number(msg.id.replace(/\D/g, "")) || 999) ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-500" />
+                        <span className="text-emerald-600">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copy report</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>
