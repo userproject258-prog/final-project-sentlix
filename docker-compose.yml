@@ -11,7 +11,7 @@ services:
       - ./backend/data:/app/data
     environment:
       - ENVIRONMENT=production
-      - DATABASE_URL=sqlite:////app/data/sentinelx.db
+      - DATABASE_URL=${DATABASE_URL}
     restart: unless-stopped
 
   frontend:
