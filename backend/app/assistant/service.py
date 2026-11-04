@@ -149,7 +149,24 @@ def query_assistant(prompt: str, session: Optional[Session] = None, history: Opt
             import httpx
             is_groq = key.startswith("gsk_")
             base_url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else "https://api.x.ai/v1/chat/completions"
-            models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if is_groq else ["grok-2-latest", "grok-beta"]
+            models_to_try = (
+                ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "allam-2-7b", "llama-3.3-70b-versatile"]
+                if is_groq
+                else ["grok-3", "grok-2-latest", "grok-beta"]
+            )
+            if is_groq:
+                try:
+                    r_models = httpx.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {key}"}, timeout=5.0)
+                    if r_models.status_code == 200:
+                        avail = [
+                            m["id"] for m in r_models.json().get("data", [])
+                            if not any(x in m["id"] for x in ("whisper", "tts", "guard", "orpheus", "safeguard"))
+                        ]
+                        for m in avail:
+                            if m not in models_to_try:
+                                models_to_try.append(m)
+                except Exception:
+                    pass
             for model in models_to_try:
                 try:
                     response = httpx.post(
@@ -168,7 +185,7 @@ def query_assistant(prompt: str, session: Optional[Session] = None, history: Opt
                     )
                     response.raise_for_status()
                     data = response.json()
-                    text = data["choices"][0]["message"]["content"].strip()
+                    text = (data["choices"][0]["message"].get("content") or "").strip()
                     if text:
                         return {
                             "response": text,
@@ -178,6 +195,8 @@ def query_assistant(prompt: str, session: Optional[Session] = None, history: Opt
                         }
                 except Exception as exc:
                     logger.warning("Assistant OpenAI-compatible request failed for %s: %s", model, exc)
+            return {"response": _local_response(context, True), "engine": "Local recorded-data summary",
+                    "context_injected": context.get("available", False), "api_key_configured": False}
 
         is_vertex_key = key.startswith("AQ.")
         default_model = "gemini-2.5-flash" if is_vertex_key else "gemini-flash-latest"

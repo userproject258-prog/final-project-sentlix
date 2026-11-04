@@ -303,7 +303,11 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
         import httpx
         is_groq = api_key.startswith("gsk_")
         base_url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else "https://api.x.ai/v1/chat/completions"
-        models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if is_groq else ["grok-2-latest", "grok-beta"]
+        models_to_try = (
+            ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "allam-2-7b", "llama-3.3-70b-versatile"]
+            if is_groq
+            else ["grok-3", "grok-2-latest", "grok-beta"]
+        )
         for model_name in models_to_try:
             try:
                 res = httpx.post(
@@ -321,11 +325,12 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
                     timeout=20.0,
                 )
                 if res.status_code == 200:
-                    text = res.json()["choices"][0]["message"]["content"].strip()
+                    text = (res.json()["choices"][0]["message"].get("content") or "").strip()
                     if text:
                         return clean_report_markdown(text)
             except Exception:
                 continue
+        return ""
 
     candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
     is_vertex_key = api_key.startswith("AQ.")
