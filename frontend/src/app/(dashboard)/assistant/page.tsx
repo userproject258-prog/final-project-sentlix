@@ -72,6 +72,9 @@ export default function AssistantPage() {
       });
       if (!response.ok) throw new Error("Assistant request failed");
       const data = await response.json();
+      if (typeof data.api_key_configured === "boolean") {
+        setKeyStatus({ configured: data.api_key_configured });
+      }
       
       messageIdRef.current += 1;
       setMessages(prev => [...prev, {

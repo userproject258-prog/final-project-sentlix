@@ -606,7 +606,7 @@ class AssistantQuery(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     history: list[AssistantMessage] = Field(default_factory=list, max_length=8)
 
-from app.assistant.service import query_assistant
+from app.assistant.service import query_assistant, get_gemini_api_key, validate_gemini_api_key
 
 @app.post("/api/assistant/query")
 async def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
@@ -615,10 +615,11 @@ async def ask_assistant(query: AssistantQuery, session: Session = Depends(get_se
 
 @app.get("/api/assistant/status")
 async def assistant_status():
-    import os
-    k = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY") or "").strip()
+    k = get_gemini_api_key()
+    is_valid = validate_gemini_api_key(k)
     return {
-        "gemini_api_key_configured": bool(k),
+        "gemini_api_key_configured": is_valid,
+        "key_present": bool(k),
         "key_length": len(k) if k else 0
     }
 

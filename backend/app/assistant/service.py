@@ -64,13 +64,56 @@ def _local_response(context: Dict[str, Any], provider_failed: bool) -> str:
     return "\n".join(lines)
 
 
+def _load_env_if_needed() -> None:
+    for env_path in (
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".env"),
+    ):
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            os.environ.setdefault(k.strip(), v.strip())
+            except Exception:
+                pass
+
+
+def get_gemini_api_key() -> str:
+    _load_env_if_needed()
+    return (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GENAI_API_KEY")
+        or ""
+    ).strip()
+
+
+def validate_gemini_api_key(key: Optional[str] = None) -> bool:
+    api_key = (key if key is not None else get_gemini_api_key()).strip()
+    if not api_key:
+        return False
+    try:
+        import httpx
+        response = httpx.get(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            params={"key": api_key, "pageSize": 1},
+            timeout=5.0,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
 def query_assistant(prompt: str, session: Optional[Session] = None, history: Optional[list] = None) -> Dict[str, Any]:
     try:
         context = collect_context(session)
     except Exception:
         logger.exception("Could not collect assistant context")
         context = {"available": False}
-    key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY") or "").strip()
+    key = get_gemini_api_key()
     if key:
         try:
             import httpx
@@ -87,8 +130,8 @@ def query_assistant(prompt: str, session: Optional[Session] = None, history: Opt
             data = response.json()
             text = "\n".join(part.get("text", "") for part in data["candidates"][0]["content"]["parts"]).strip()
             if text:
-                return {"response": text, "engine": f"Google {model}", "context_injected": context.get("available", False)}
+                return {"response": text, "engine": f"Google {model}", "context_injected": context.get("available", False), "api_key_configured": True}
         except Exception as exc:
             logger.warning("Assistant provider request failed: %s", type(exc).__name__)
     return {"response": _local_response(context, bool(key)), "engine": "Local recorded-data summary",
-            "context_injected": context.get("available", False), "api_key_configured": bool(key)}
+            "context_injected": context.get("available", False), "api_key_configured": False}
