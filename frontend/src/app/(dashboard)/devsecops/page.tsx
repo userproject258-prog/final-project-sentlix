@@ -304,47 +304,21 @@ export default function DevSecOpsPage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
-      {/* Hero Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-border/40 pb-6">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-mono text-cyan-600 dark:text-cyan-400 tracking-wider uppercase mb-1">
-            <Shield className="w-4 h-4 text-cyan-500" />
-            <span>DevSecOps AI Security Audit Tool // Multi-Agent Engine</span>
+      {/* Page header */}
+      <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+            <Shield className="h-3.5 w-3.5" /> Security audit <span className="text-slate-300">/</span> DevSecOps AI
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            See the attack surface before attackers do.
-          </h1>
-          <p className="text-sm text-muted mt-1 max-w-2xl leading-relaxed">
-            A calm, evidence-first interface for turning any target into a prioritized, actionable security brief.
-            Execute the 8-stage CrewAI pipeline or run step-by-step guided assessments.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Security assessment</h1>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">Configure a target and review security evidence across your assessment stages.</p>
         </div>
-
-        {/* Live Status indicator */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/80 bg-surface text-xs font-medium shadow-xs">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isRunning
-                  ? "bg-amber-500 animate-ping"
-                  : audit?.status === "complete"
-                  ? "bg-emerald-500"
-                  : audit?.status === "failed"
-                  ? "bg-red-500"
-                  : "bg-muted"
-              }`}
-            />
-            <span className="font-mono uppercase font-semibold text-foreground">
-              {audit?.status || "IDLE"}
-            </span>
-            {audit?.status === "running" && (
-              <span className="text-muted border-l border-border/60 pl-2">
-                Stage {audit.completed + 1} of {audit.total_stages}
-              </span>
-            )}
-          </div>
+        <div className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-xs" aria-live="polite">
+          <span className={`h-2 w-2 rounded-full ${isRunning ? "bg-amber-500" : audit?.status === "complete" ? "bg-emerald-500" : audit?.status === "failed" ? "bg-rose-500" : "bg-slate-400"}`} />
+          <span className="capitalize">{audit?.status || (connectionError ? "Unavailable" : "Connecting")}</span>
+          {audit?.status === "running" && <span className="border-l border-slate-200 pl-2 font-normal text-slate-500">Stage {audit.completed + 1} of {audit.total_stages}</span>}
         </div>
-      </div>
+      </header>
 
       {connectionError && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Unable to refresh audit status. The information shown may be out of date. <button onClick={fetchStatus} className="font-semibold underline">Retry</button></div>}
 
@@ -374,181 +348,82 @@ export default function DevSecOpsPage() {
         </div>
       )}
 
-      {/* Main Grid: Control Form & Configuration */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Form: Target Setup */}
-        <div className="lg:col-span-2 bg-surface border border-border rounded-xl p-6 shadow-xs space-y-5">
-          <div className="flex items-center justify-between border-b border-border/40 pb-3">
-            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-              <Globe className="w-4 h-4 text-primary" /> Audit Target Configuration
-            </h2>
-            <span className="text-xs text-muted font-mono">OWASP & CVE Intelligence</span>
+      {/* Assessment configuration and status */}
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-2">
+          <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-5 sm:px-6">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-primary"><Globe className="h-5 w-5" /></div>
+            <div><h2 className="text-base font-bold text-slate-900">Configure assessment</h2><p className="mt-1 text-xs leading-relaxed text-slate-500">Choose where and how you want to run the audit.</p></div>
           </div>
-
-          <form onSubmit={handleLaunch} className="space-y-4">
+          <form onSubmit={handleLaunch} className="space-y-5 p-5 sm:p-6">
             <div>
-              <label htmlFor="audit-target" className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
-                Target Domain, IP, or URL
-              </label>
+              <label htmlFor="audit-target" className="mb-2 block text-xs font-semibold text-slate-700">Target domain, IP, or URL <span className="text-rose-500">*</span></label>
               <div className="relative">
-                <input
-                  type="text"
-                  id="audit-target"
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  placeholder="https://app.example.com or 192.168.1.1"
-                  className="w-full bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  disabled={isRunning}
-                  required
-                />
+                <Globe className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input type="text" id="audit-target" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="https://app.example.com" className="w-full rounded-lg border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-500" disabled={isRunning} required aria-describedby="audit-target-hint" />
               </div>
+              <p id="audit-target-hint" className="mt-1.5 text-[11px] text-slate-500">Enter a domain, IP address, or full URL.</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="audit-provider" className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
-                  AI Provider
-                </label>
-                <select
-                  id="audit-provider"
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
-                  disabled={isRunning}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="gemini">Google Gemini (gemini-3.8-flash)</option>
-                  <option value="grok">xAI Grok (grok-3-mini)</option>
-                  <option value="openai">OpenAI (gpt-4o-mini)</option>
-                </select>
-              </div>
+            <div>
+              <label htmlFor="audit-provider" className="mb-2 block text-xs font-semibold text-slate-700">AI provider</label>
+              <select id="audit-provider" value={provider} onChange={(e) => setProvider(e.target.value)} disabled={isRunning} className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-500">
+                <option value="gemini">Google Gemini</option>
+                <option value="grok">xAI Grok</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-foreground/80 uppercase tracking-wider mb-1.5">
-                  Assessment Mode
-                </label>
-                <div className="flex gap-4 pt-1">
-                  <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
-                    <input
-                      type="radio"
-                      name="mode"
-                      value="guided"
-                      checked={mode === "guided"}
-                      onChange={() => setMode("guided")}
-                      disabled={isRunning}
-                      className="accent-primary"
-                    />
-                    One-by-one Guided
+            <fieldset disabled={isRunning}>
+              <legend className="mb-2 block text-xs font-semibold text-slate-700">Assessment mode</legend>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {[
+                  { value: "guided" as const, label: "Guided assessment", description: "Review and continue one stage at a time." },
+                  { value: "all" as const, label: "Run all stages", description: "Run the full assessment automatically." },
+                ].map((option) => (
+                  <label key={option.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors ${mode === option.value ? "border-blue-300 bg-blue-50/60" : "border-slate-200 bg-white hover:border-slate-300"} ${isRunning ? "cursor-not-allowed opacity-60" : ""}`}>
+                    <input type="radio" name="mode" value={option.value} checked={mode === option.value} onChange={() => setMode(option.value)} className="mt-0.5 h-4 w-4 accent-primary" />
+                    <span><span className="block text-xs font-semibold text-slate-900">{option.label}</span><span className="mt-1 block text-[11px] leading-relaxed text-slate-500">{option.description}</span></span>
                   </label>
-                  <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
-                    <input
-                      type="radio"
-                      name="mode"
-                      value="all"
-                      checked={mode === "all"}
-                      onChange={() => setMode("all")}
-                      disabled={isRunning}
-                      className="accent-primary"
-                    />
-                    Run All Stages
-                  </label>
-                </div>
+                ))}
               </div>
-            </div>
+            </fieldset>
 
-            <div className="pt-2">
-              <label className="flex items-start gap-2.5 text-xs text-muted cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={authorized}
-                  onChange={(e) => setAuthorized(e.target.checked)}
-                  disabled={isRunning}
-                  className="mt-0.5 accent-primary"
-                  required
-                />
-                <span>
-                  I have explicit authorization to test this target. Active probes may generate network traffic and simulate intrusion vectors.
-                </span>
-              </label>
-            </div>
+            <label className={`flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 ${isRunning ? "opacity-60" : "cursor-pointer"}`}>
+              <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} disabled={isRunning} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" required />
+              <span className="text-xs leading-relaxed text-slate-600"><span className="font-semibold text-slate-800">I have authorization to test this target.</span> Active probes may generate network traffic and simulate intrusion vectors.</span>
+            </label>
 
-            <div className="pt-3 flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
-                disabled={loading || isRunning || !target.trim()}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold text-sm rounded-lg hover:bg-primary/90 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
-              >
-                {loading || isRunning ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Executing Audit...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>Launch Assessment</span>
-                  </>
-                )}
+            <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+              <button type="submit" disabled={loading || isRunning || !target.trim()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
+                {loading || isRunning ? <><RefreshCw className="h-4 w-4 animate-spin" /><span>Executing audit...</span></> : <><Play className="h-4 w-4 fill-current" /><span>Launch assessment</span><ArrowRight className="ml-1 h-4 w-4" /></>}
               </button>
-
-              {audit && audit.status !== "idle" && (
-                <button
-                  type="button"
-                  onClick={fetchStatus}
-                  className="p-2.5 text-muted hover:text-foreground border border-border rounded-lg bg-surface transition-colors"
-                  title="Refresh Status"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              )}
+              {audit && audit.status !== "idle" && <button type="button" onClick={fetchStatus} aria-label="Refresh assessment status" className="rounded-lg border border-slate-200 bg-white p-2.5 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"><RefreshCw className="h-4 w-4" /></button>}
             </div>
           </form>
-        </div>
+        </section>
 
-        {/* Right Info: Live Pulse Metrics */}
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-muted mb-2">
-              Assessment Pulse
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="p-3 rounded-lg border border-border bg-background">
-                <div className="text-[11px] font-mono text-muted uppercase">Status</div>
-                <div className="text-lg font-bold text-foreground capitalize mt-0.5">
-                  {audit?.status || "Idle"}
-                </div>
-                <div className="text-[10px] text-muted truncate mt-0.5">{audit?.active || "Ready"}</div>
-              </div>
-
-              <div className="p-3 rounded-lg border border-border bg-background">
-                <div className="text-[11px] font-mono text-muted uppercase">Completed</div>
-                <div className="text-lg font-bold text-foreground mt-0.5">
-                  {audit?.completed || 0} / {audit?.total_stages || 8}
-                </div>
-                <div className="text-[10px] text-muted mt-0.5">Pipeline Stages</div>
-              </div>
-
-              <div className="p-3 rounded-lg border border-border bg-background">
-                <div className="text-[11px] font-mono text-muted uppercase">Critical / High mentions</div>
-                <div className="text-lg font-bold text-red-500 mt-0.5">
-                  {(audit?.counts?.Critical || 0) + (audit?.counts?.High || 0)}
-                </div>
-                <div className="text-[10px] text-muted mt-0.5">Text mentions, not finding counts</div>
-              </div>
-
-              <div className="p-3 rounded-lg border border-border bg-background">
-                <div className="text-[11px] font-mono text-muted uppercase">Last Run</div>
-                <div className="text-xs font-mono font-medium text-foreground mt-1 truncate">
-                  {audit?.started || "--:--"}
-                </div>
-                <div className="text-[10px] text-muted mt-0.5">Session Timestamp</div>
-              </div>
-            </div>
+        <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs" aria-label="Assessment overview">
+          <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600"><Activity className="h-5 w-5" /></div>
+            <div><h2 className="text-sm font-bold text-slate-900">Assessment overview</h2><p className="mt-1 text-xs text-slate-500">Your current audit at a glance</p></div>
           </div>
+          <div className="space-y-5 p-5">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-slate-600">Stage progress</span><span className="text-xs font-bold tabular-nums text-slate-900">{audit ? audit.completed : "—"} <span className="font-normal text-slate-400">/</span> {audit?.total_stages || 8}</span></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Assessment stage progress" aria-valuemin={0} aria-valuemax={audit?.total_stages || 8} aria-valuenow={audit ? audit.completed : undefined}><div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, ((audit?.completed ?? 0) / (audit?.total_stages || 8)) * 100))}%` }} /></div>
+              <p className="mt-2.5 text-[11px] leading-relaxed text-slate-500">{!audit ? (connectionError ? "Assessment status unavailable." : "Connecting to the assessment service...") : audit.status !== "idle" ? audit.active : "Ready to begin when you are."}</p>
+            </div>
 
-          <div className="border-t border-border/50 pt-3 text-[11px] text-muted">
-            <span className="font-semibold text-foreground">Multi-Agent Roster:</span> DNS Recon, Port Inspector, Header Analyzer, TLS/SSL, Injection Tester, Auth Auditor & Report Synthesizer.
+            <dl className="divide-y divide-slate-100">
+              <div className="flex items-start justify-between gap-4 py-3 first:pt-0"><dt className="text-xs text-slate-500">Status</dt><dd className="text-right text-xs font-semibold capitalize text-slate-800">{audit?.status || (connectionError ? "Unavailable" : "Connecting")}</dd></div>
+              <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs text-slate-500">Critical / high mentions</dt><dd className="text-right text-xs font-semibold tabular-nums text-slate-800">{audit ? (audit.counts?.Critical || 0) + (audit.counts?.High || 0) : "—"}</dd></div>
+              <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs text-slate-500">Last started</dt><dd className="text-right text-xs font-semibold text-slate-800">{audit ? audit.started || "No assessment yet" : "—"}</dd></div>
+              {audit?.target && <div className="flex items-start justify-between gap-4 py-3"><dt className="shrink-0 text-xs text-slate-500">Target</dt><dd className="break-all text-right text-xs font-medium text-slate-800">{audit.target}</dd></div>}
+            </dl>
+            <p className="flex items-start gap-2 rounded-lg bg-blue-50 px-3 py-2.5 text-[11px] leading-relaxed text-blue-800"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600" /><span>Severity mentions are counted from report text, not verified findings.</span></p>
           </div>
-        </div>
+        </aside>
       </div>
 
       {/* Live Session Progress Bar & Pipeline Steps */}
