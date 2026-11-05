@@ -31,15 +31,12 @@ export function stripEmojis(str: string): string {
       /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{200D}\u{2B50}\u{20E3}\u{2190}-\u{21FF}]/gu,
       ""
     )
-    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
 /**
- * Clean and normalize markdown string:
- * - Fixes raw markdown strings where headers (###), table rows (|), or list items (-)
- *   got collapsed onto the same line or lost newlines.
- * - Cleans up dangling markdown syntax markers.
+ * Normalize line endings and escaped line breaks while preserving the
+ * structure of headings, tables, lists, and code blocks.
  */
 export function normalizeMarkdownText(raw: string): string {
   if (!raw) return "";
@@ -52,10 +49,7 @@ export function normalizeMarkdownText(raw: string): string {
     .replace(/^```(?:markdown|md|text)?\s*/i, "")
     .replace(/\s*```$/, "");
 
-  // Separate ## headers if glued to text without preceding newline
-  const withHeaders = text.replace(/([^\n#])\s*(#{1,4}\s+[^\n]+)/g, "$1\n\n$2\n\n");
-
-  const lines = withHeaders.split("\n");
+  const lines = text.split("\n");
   const output: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -306,12 +300,30 @@ function Inline({ text, cell = false }: { text: string; cell?: boolean }) {
 
 const splitRow = (line: string) => {
   const inner = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-  return inner.split("|").map((c) => c.trim());
+  const cells: string[] = [];
+  let cell = "";
+  let inCode = false;
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i];
+    if (char === "\\" && inner[i + 1] === "|") {
+      cell += "|";
+      i++;
+    } else if (char === "`") {
+      inCode = !inCode;
+      cell += char;
+    } else if (char === "|" && !inCode) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
 };
 
 const isSeparatorRow = (line: string) => {
-  const inner = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-  return inner.split("|").every((c) => /^:?-{2,}:?$/.test(c.trim()));
+  return splitRow(line).every((c) => /^:?-{2,}:?$/.test(c));
 };
 
 function Table({ rows }: { rows: string[] }) {
@@ -340,12 +352,13 @@ function Table({ rows }: { rows: string[] }) {
   return (
     <div className="my-4 overflow-x-auto overflow-y-auto max-h-[560px] rounded-xl border border-border/80 bg-surface shadow-xs relative">
       <table className="w-full text-sm border-collapse min-w-max">
-        <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur-md border-b border-border shadow-2xs">
+        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-border shadow-2xs">
           <tr>
             {header.map((h, i) => (
               <th
                 key={i}
-                className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap bg-surface/95"
+                scope="col"
+                className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-700 whitespace-nowrap bg-slate-50"
               >
                 <Inline text={h.replace(/[*_`]/g, "")} />
               </th>
