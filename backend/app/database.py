@@ -24,6 +24,7 @@ def init_db():
     for stmt in (
         "ALTER TABLE threatevent ADD COLUMN destination VARCHAR",
         "ALTER TABLE threatevent ADD COLUMN confidence FLOAT",
+        "ALTER TABLE threatevent ADD COLUMN simulated BOOLEAN NOT NULL DEFAULT FALSE",
     ):
         try:
             with engine.begin() as conn:

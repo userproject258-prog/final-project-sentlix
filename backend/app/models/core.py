@@ -14,6 +14,7 @@ class ThreatEvent(SQLModel, table=True):
     confidence: Optional[float] = Field(default=None)
     severity: str
     status: str
+    simulated: bool = Field(default=False)
 
 class CSPMFinding(SQLModel, table=True):
     id: str = Field(primary_key=True)

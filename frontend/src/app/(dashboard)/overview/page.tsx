@@ -1,9 +1,10 @@
 "use client";
 
 import { API_URL, WS_URL, apiFetch as fetch, websocketProtocols } from "@/lib/api";
+import { TrafficSimulator } from "@/components/TrafficSimulator";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Shield, AlertTriangle, Activity, Cloud, RefreshCw, Zap, Radio, Loader2 } from "lucide-react";
+import { Shield, AlertTriangle, Activity, Cloud, RefreshCw, Radio, Loader2 } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -37,6 +38,7 @@ interface OverviewData {
     source: string;
     severity: string;
     status: string;
+    simulated: boolean;
   }[];
 }
 
@@ -44,8 +46,6 @@ export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
-  const [simulating, setSimulating] = useState(false);
-  const [simAlert, setSimAlert] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const fetchOverview = useCallback(async () => {
@@ -64,23 +64,6 @@ export default function OverviewPage() {
     setIsRefreshing(true);
     await fetchOverview();
     setIsRefreshing(false);
-  };
-
-  const handleSimulateAttack = async () => {
-    setSimulating(true);
-    setSimAlert(null);
-    try {
-      const res = await fetch(`${API_URL}/api/threats/simulate`, { method: "POST" });
-      const result = await res.json();
-      if (result.status === "success") {
-        setSimAlert(`🚨 Injected Traffic Vector: ${result.scenario} -> ${result.analysis.prediction} (${result.analysis.severity})`);
-        await fetchOverview();
-      }
-    } catch (e) {
-      console.error("Simulation error:", e);
-    } finally {
-      setSimulating(false);
-    }
   };
 
   useEffect(() => {
@@ -184,16 +167,6 @@ export default function OverviewPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={handleSimulateAttack}
-            disabled={simulating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md transition-all shadow-xs disabled:opacity-50"
-            title="Inject simulated traffic vector to test real-time IDS ML classification"
-          >
-            {simulating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            <span>{simulating ? "Injecting..." : "Simulate Attack Traffic"}</span>
-          </button>
-
-          <button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-surface hover:bg-gray-50 text-foreground rounded-md transition-all shadow-xs disabled:opacity-50"
@@ -204,12 +177,7 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {simAlert && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs font-medium rounded-lg flex items-center justify-between animate-fadeIn">
-          <span>{simAlert}</span>
-          <button onClick={() => setSimAlert(null)} className="text-red-500 hover:text-red-700 font-bold ml-2">✕</button>
-        </div>
-      )}
+      <TrafficSimulator onComplete={() => void fetchOverview()} />
 
       {/* Top Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -298,7 +266,7 @@ export default function OverviewPage() {
                 data.recent_events.map((event) => (
                   <tr key={event.id} className="border-b border-border hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">{event.time}</td>
-                    <td className="px-6 py-4 font-medium text-foreground">{event.type}</td>
+                    <td className="px-6 py-4 font-medium text-foreground">{event.type} {event.simulated && <span className="text-xs text-blue-700">(Simulated)</span>}</td>
                     <td className="px-6 py-4 text-muted font-mono">{event.source}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${

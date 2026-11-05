@@ -5,10 +5,9 @@ import { API_URL, apiFetch as fetch } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { DataTable } from "@/components/ui/DataTable";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
+import { TrafficSimulator } from "@/components/TrafficSimulator";
 import { 
-  ShieldAlert, 
-  Zap, 
-  Radio
+  ShieldAlert
 } from "lucide-react";
 
 interface ThreatData {
@@ -20,6 +19,7 @@ interface ThreatData {
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
   status: string;
   confidence: number | null;
+  simulated: boolean;
 }
 
 interface AuditFinding {
@@ -38,8 +38,6 @@ export default function ThreatDetectionPage() {
   const [threats, setThreats] = useState<ThreatData[]>([]);
   const [loading, setLoading] = useState(true);
   const [findings, setFindings] = useState<AuditFinding[]>([]);
-  const [simulating, setSimulating] = useState(false);
-  const [simFeedback, setSimFeedback] = useState<string | null>(null);
 
   const fetchThreats = () => {
     fetch(`${API_URL}/api/threats`)
@@ -67,24 +65,6 @@ export default function ThreatDetectionPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleSimulateAttack = () => {
-    setSimulating(true);
-    setSimFeedback(null);
-    fetch(`${API_URL}/api/threats/simulate`, { method: "POST" })
-      .then((res) => res.json())
-      .then((res) => {
-        setSimulating(false);
-        if (res.status === "success") {
-          setSimFeedback(`🚨 Injected traffic vector: ${res.scenario} -> Classified as ${res.analysis.prediction} (${(res.analysis.confidence * 100).toFixed(1)}% confidence, Severity: ${res.analysis.severity})`);
-          fetchThreats();
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        setSimulating(false);
-      });
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -98,32 +78,9 @@ export default function ThreatDetectionPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleSimulateAttack}
-            disabled={simulating}
-            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-md transition-colors disabled:opacity-50 shadow-xs"
-          >
-            <Zap className={`w-3.5 h-3.5 ${simulating ? "animate-bounce" : ""}`} /> 
-            {simulating ? "Simulating Traffic..." : "Simulate Live Attack"}
-          </button>
-        </div>
       </div>
 
-      {simFeedback && (
-        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-2 font-mono">
-            <Radio className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
-            <span>{simFeedback}</span>
-          </div>
-          <button 
-            onClick={() => setSimFeedback(null)} 
-            className="text-[11px] underline text-rose-700 hover:text-rose-900 ml-4 shrink-0"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+      <TrafficSimulator onComplete={fetchThreats} />
 
       <section className="bg-surface border border-red-200 rounded-xl p-5 space-y-4">
         <div>
@@ -161,7 +118,7 @@ export default function ThreatDetectionPage() {
             keyExtractor={(row) => row.id}
             columns={[
               { header: "Event ID", accessor: (row) => <span className="font-mono text-muted text-xs font-medium">{row.id}</span> },
-              { header: "Attack Type", accessor: "type", className: "font-semibold text-gray-900" },
+              { header: "Attack Type", accessor: (row) => <span>{row.type} {row.simulated && <span className="text-xs text-blue-700">(Simulated)</span>}</span>, className: "font-semibold text-gray-900" },
               { 
                 header: "Source IP", 
                 accessor: (row) => (

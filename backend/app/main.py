@@ -330,6 +330,7 @@ async def get_overview(session: Session = Depends(get_session)):
                 "source": evt.source,
                 "severity": evt.severity,
                 "status": evt.status,
+                "simulated": evt.simulated,
             }
             for evt in events
         ],
@@ -383,6 +384,7 @@ async def get_threats(session: Session = Depends(get_session)):
             "destination": getattr(evt, "destination", None) or _default_destination(evt.type),
             "severity": evt.severity,
             "status": evt.status,
+            "simulated": evt.simulated,
             "confidence": _default_confidence(evt)
         }
         for evt in events
@@ -390,6 +392,9 @@ async def get_threats(session: Session = Depends(get_session)):
 
 @app.post("/api/threats/analyze")
 async def analyze_threat(event: NetworkEvent, session: Session = Depends(get_session)):
+    return await _analyze_threat(event, session)
+
+async def _analyze_threat(event: NetworkEvent, session: Session, simulated: bool = False):
     analysis = analyze_event(event.dict())
     
     if "error" in analysis:
@@ -404,7 +409,8 @@ async def analyze_threat(event: NetworkEvent, session: Session = Depends(get_ses
         destination=event.destination or _default_destination(analysis["prediction"]),
         confidence=float(analysis.get("confidence", 0.95)),
         severity=analysis["severity"],
-        status="Open"
+        status="Open",
+        simulated=simulated,
     )
     
     # In a real system, we might only log if severity > LOW. For demo, we log all.
@@ -412,10 +418,10 @@ async def analyze_threat(event: NetworkEvent, session: Session = Depends(get_ses
         session.add(new_event)
         session.add(Alert(
             id=f"ALT-{uuid.uuid4().hex[:8]}",
-            title=f"{new_event.type} detected",
+            title=f"{'Simulated: ' if simulated else ''}{new_event.type} detected",
             severity=new_event.severity,
             source=new_event.source,
-            message=f"Threat event {new_event.id} was detected from {new_event.source}.",
+            message=f"{'Simulated threat' if simulated else 'Threat'} event {new_event.id} was detected from {new_event.source}.",
         ))
         
         # Update system stats
@@ -477,55 +483,50 @@ async def get_model_details():
         ]
     }
 
+# Scenarios are synthetic feature vectors for the model's existing classes. Targets
+# are labels on the generated event; no packets are sent to these destinations.
+SIMULATION_SCENARIOS = {
+    "ssh_brute_force": {"name": "SSH brute force", "target": "10.0.1.50:22", "packet_size": 125, "duration": 4.5, "failed_logins": 25, "unique_ports_accessed": 1, "bytes_sent": 500},
+    "web_login_brute_force": {"name": "Web login brute force", "target": "10.0.1.100:443", "packet_size": 140, "duration": 7, "failed_logins": 35, "unique_ports_accessed": 1, "bytes_sent": 580},
+    "rdp_brute_force": {"name": "RDP brute force", "target": "10.0.1.60:3389", "packet_size": 110, "duration": 6, "failed_logins": 20, "unique_ports_accessed": 1, "bytes_sent": 470},
+    "port_scan": {"name": "Network port scan", "target": "10.0.1.0/24", "packet_size": 64, "duration": 0.8, "failed_logins": 0, "unique_ports_accessed": 250, "bytes_sent": 200},
+    "database_port_scan": {"name": "Database host port scan", "target": "10.0.1.25", "packet_size": 70, "duration": 1.2, "failed_logins": 0, "unique_ports_accessed": 120, "bytes_sent": 230},
+    "http_flood": {"name": "HTTP flood", "target": "10.0.1.100:80", "packet_size": 1480, "duration": 12, "failed_logins": 0, "unique_ports_accessed": 1, "bytes_sent": 12000},
+    "api_flood": {"name": "API flood", "target": "10.0.1.110:443", "packet_size": 1450, "duration": 8, "failed_logins": 0, "unique_ports_accessed": 1, "bytes_sent": 11000},
+    "dns_flood": {"name": "DNS flood", "target": "10.0.1.53:53", "packet_size": 1550, "duration": 10, "failed_logins": 0, "unique_ports_accessed": 1, "bytes_sent": 13000},
+}
+
+class SimulationRequest(BaseModel):
+    scenario: str | None = None
+    target: str | None = Field(default=None, max_length=200)
+
+@app.get("/api/threats/simulation-scenarios")
+async def get_simulation_scenarios():
+    return {"scenarios": [{"id": key, "name": value["name"], "target": value["target"]}
+                          for key, value in SIMULATION_SCENARIOS.items()]}
+
 @app.post("/api/threats/simulate")
-async def simulate_live_traffic_burst(session: Session = Depends(get_session)):
-    """Simulates an incoming network traffic vector to trigger real-time AI ML detection and broadcast."""
+async def simulate_live_traffic_burst(session: Session = Depends(get_session), request: SimulationRequest | None = None):
+    """Classify a synthetic flow without sending network traffic to the target."""
     import random
-    scenarios = [
-        {
-            "name": "SSH Brute Force Flood",
-            "event": NetworkEvent(
-                packet_size=125.0,
-                duration=4.5,
-                failed_logins=random.randint(15, 60),
-                unique_ports_accessed=1,
-                bytes_sent=random.uniform(400, 650),
-                source_ip=f"198.51.100.{random.randint(10, 250)}",
-                destination="10.0.1.50:22"
-            )
-        },
-        {
-            "name": "Nmap Horizontal Port Scan",
-            "event": NetworkEvent(
-                packet_size=64.0,
-                duration=0.8,
-                failed_logins=0,
-                unique_ports_accessed=random.randint(80, 500),
-                bytes_sent=random.uniform(150, 300),
-                source_ip=f"203.0.113.{random.randint(10, 250)}",
-                destination="10.0.1.0/24"
-            )
-        },
-        {
-            "name": "High Volume HTTP DoS Attack",
-            "event": NetworkEvent(
-                packet_size=1480.0,
-                duration=12.0,
-                failed_logins=0,
-                unique_ports_accessed=1,
-                bytes_sent=random.uniform(12000, 25000),
-                source_ip=f"45.33.32.{random.randint(10, 250)}",
-                destination="10.0.1.100:80"
-            )
-        }
-    ]
-    chosen = random.choice(scenarios)
-    result = await analyze_threat(chosen["event"], session)
-    return {
-        "status": "success",
-        "scenario": chosen["name"],
-        "analysis": result["analysis"]
-    }
+    request = request or SimulationRequest()
+    scenario_id = request.scenario or random.choice(list(SIMULATION_SCENARIOS))
+    scenario = SIMULATION_SCENARIOS.get(scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=400, detail="Unknown simulation scenario")
+    target = request.target.strip() if request.target is not None else scenario["target"]
+    if not target or any(ord(char) < 32 or ord(char) == 127 for char in target):
+        raise HTTPException(status_code=400, detail="Enter a valid target label")
+    event = NetworkEvent(
+        packet_size=scenario["packet_size"], duration=scenario["duration"],
+        failed_logins=scenario["failed_logins"], unique_ports_accessed=scenario["unique_ports_accessed"],
+        bytes_sent=scenario["bytes_sent"], source_ip=f"198.51.100.{random.randint(10, 250)}", destination=target,
+    )
+    result = await _analyze_threat(event, session, simulated=True)
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return {"status": "success", "scenario": scenario["name"], "scenario_id": scenario_id,
+            "target": target, "analysis": result["analysis"], "logged": result["logged"]}
 
 from app.models.core import CSPMFinding
 from app.cspm.scanner import run_cspm_scan, remediate_finding
