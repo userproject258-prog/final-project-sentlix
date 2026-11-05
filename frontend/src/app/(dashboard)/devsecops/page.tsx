@@ -428,146 +428,85 @@ export default function DevSecOpsPage() {
 
       {/* Live Session Progress Bar & Pipeline Steps */}
       {audit && audit.status !== "idle" && (
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Activity className="w-4 h-4 text-cyan-500" />
-                Live Assessment Execution Pipeline
-              </h2>
-              <p className="text-xs text-muted mt-0.5">
-                Active Target: <span className="font-mono text-foreground font-semibold">{audit.target}</span>
-              </p>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs" aria-labelledby="pipeline-title">
+          <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-primary"><Activity className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2"><h2 id="pipeline-title" className="text-base font-bold text-slate-900">Assessment pipeline</h2><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${isRunning ? "border-blue-200 bg-blue-50 text-blue-700" : audit.status === "complete" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : audit.status === "failed" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}><span className={`h-1.5 w-1.5 rounded-full ${isRunning ? "bg-blue-500" : audit.status === "complete" ? "bg-emerald-500" : audit.status === "failed" ? "bg-rose-500" : "bg-slate-400"}`} />{audit.status === "complete" && audit.completed < audit.total_stages ? "Stage complete" : audit.status}</span></div>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">Target: <span className="break-all font-medium text-slate-700">{audit.target}</span></p>
+              </div>
             </div>
 
             {/* Guided Controls */}
             {(audit.status === "stopped" || (audit.status === "complete" && audit.mode === "guided")) && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {audit.completed < audit.total_stages ? (
                   <>
-                    <button
-                      onClick={handleNextStage}
-                      disabled={actionLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors cursor-pointer"
-                    >
-                      <ArrowRight className="w-3.5 h-3.5" /> Next Stage ({audit.completed + 1})
-                    </button>
-                    <button
-                      onClick={handleRunAll}
-                      disabled={actionLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Play className="w-3.5 h-3.5" /> Run All Remaining
-                    </button>
+                    <button onClick={handleNextStage} disabled={actionLoading} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"><ArrowRight className="h-3.5 w-3.5" /> Next stage ({audit.completed + 1})</button>
+                    <button onClick={handleRunAll} disabled={actionLoading} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"><Play className="h-3.5 w-3.5" /> Run all remaining</button>
                   </>
                 ) : (
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                    <CheckCircle2 className="w-4 h-4" /> All Stages Complete
-                  </div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> All stages complete</div>
                 )}
                 {isRunning && (
-                  <button
-                    onClick={handleStop}
-                    disabled={actionLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Pause className="w-3.5 h-3.5" /> Pause
-                  </button>
+                  <button onClick={handleStop} disabled={actionLoading} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"><Pause className="h-3.5 w-3.5" /> Pause</button>
                 )}
               </div>
             )}
           </div>
 
-          {/* Progress Bar */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs font-mono text-muted">
-              <span>{audit.active}</span>
-              <span>{Math.round((audit.completed / (audit.total_stages || 8)) * 100)}%</span>
-            </div>
-            <div className="w-full bg-border/60 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-primary h-full transition-all duration-500 rounded-full"
-                style={{ width: `${(audit.completed / (audit.total_stages || 8)) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Pipeline Step Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 pt-2">
-            {audit.pipeline?.map((item, idx) => {
-              const isDone = idx < audit.completed;
-              const isCurrent = idx === audit.completed && isRunning;
-              return (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-lg border text-center transition-all ${
-                    isDone
-                      ? "border-emerald-300 dark:border-emerald-800 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                      : isCurrent
-                      ? "border-amber-400 bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-400/30"
-                      : "border-border bg-background text-muted"
-                  }`}
-                >
-                  <div className="text-[10px] font-mono uppercase mb-1">Stage {idx + 1}</div>
-                  <div className="font-semibold text-xs truncate" title={item.title}>
-                    {item.title}
-                  </div>
-                  <div className="mt-1.5 flex justify-center">
-                    {isDone ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    ) : isCurrent ? (
-                      <RefreshCw className="w-4 h-4 text-amber-500 animate-spin" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-border mt-1" />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Tools & Events Live Activity */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div className="border border-border/80 rounded-lg p-4 bg-background/50">
-              <div className="text-xs font-mono uppercase text-muted mb-2">Live Agent Activities</div>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-2">
-                {audit.events && audit.events.length > 0 ? (
-                  audit.events.map((evt, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-border/40 font-mono">
-                      <span className="text-foreground">{evt.label}</span>
-                      <span className="text-muted text-[11px]">{evt.time}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-xs text-muted py-2">Waiting for first agent event...</div>
-                )}
+          <div className="space-y-6 p-5 sm:p-6">
+            {/* Progress Bar */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div><p className="text-xs font-semibold text-slate-700">Assessment progress</p><p className="mt-1 text-xs leading-relaxed text-slate-500">{audit.active}</p></div>
+                <div className="text-right"><p className="text-sm font-bold tabular-nums text-slate-900">{Math.round((audit.completed / (audit.total_stages || 8)) * 100)}%</p><p className="mt-0.5 text-[11px] text-slate-500">{audit.completed} of {audit.total_stages || 8} stages completed</p></div>
               </div>
+              <div role="progressbar" aria-label="Pipeline stages completed" aria-valuemin={0} aria-valuemax={audit.total_stages || 8} aria-valuenow={audit.completed} className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, (audit.completed / (audit.total_stages || 8)) * 100))}%` }} /></div>
             </div>
 
-            <div className="border border-border/80 rounded-lg p-4 bg-background/50">
-              <div className="text-xs font-mono uppercase text-muted mb-2">Security Tool Instrumentation</div>
-              <div className="grid grid-cols-2 gap-2 text-xs max-h-48 overflow-y-auto pr-1">
-                {audit.tools?.map((tool, idx) => {
-                  const done = tool.stage < audit.completed;
-                  const active = tool.stage === audit.completed && isRunning;
+            {/* Pipeline Step Grid */}
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-bold text-slate-900">Assessment stages</h3><span className="text-[11px] text-slate-500">{audit.completed} completed · {audit.total_stages || 8} total</span></div>
+              <ol className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                {audit.pipeline?.map((item, idx) => {
+                  const isDone = idx < audit.completed;
+                  const isCurrent = idx === audit.completed && isRunning;
                   return (
-                    <div key={idx} className="p-2 border border-border/50 rounded bg-surface/50">
-                      <div className="font-semibold text-[11px] text-foreground truncate">{tool.title}</div>
-                      <div className="text-[10px] text-muted truncate">{tool.detail}</div>
-                      <span
-                        className={`text-[9px] font-mono uppercase mt-1 inline-block ${
-                          done ? "text-emerald-500" : active ? "text-amber-500 animate-pulse" : "text-muted"
-                        }`}
-                      >
-                        {done ? "Complete" : active ? "Running" : "Queued"}
-                      </span>
-                    </div>
+                    <li key={idx} aria-current={isCurrent ? "step" : undefined} className={`flex min-w-0 items-start gap-3 rounded-xl border p-3.5 ${isDone ? "border-emerald-200 bg-emerald-50/50" : isCurrent ? "border-blue-200 bg-blue-50/70" : "border-slate-200 bg-white"}`}>
+                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${isDone ? "bg-emerald-100 text-emerald-700" : isCurrent ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>{isDone ? <CheckCircle2 className="h-4 w-4" /> : isCurrent ? <RefreshCw className="h-4 w-4 animate-spin" /> : <span className="text-xs font-bold">{idx + 1}</span>}</span>
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Stage {idx + 1} · {isDone ? "Complete" : isCurrent ? "In progress" : "Queued"}</p><p className="mt-1 break-words text-xs font-semibold leading-4 text-slate-800">{item.title}</p></div>
+                    </li>
                   );
                 })}
-              </div>
+              </ol>
+            </div>
+
+            {/* Tools & Events Live Activity */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="pipeline-activity-title">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3.5"><Activity className="h-4 w-4 text-primary" /><div><h3 id="pipeline-activity-title" className="text-xs font-bold text-slate-900">Agent activity</h3><p className="mt-0.5 text-[11px] text-slate-500">Updates from the assessment</p></div></div>
+                <div className="max-h-72 overflow-y-auto px-4" tabIndex={0} aria-label="Assessment activity log">
+                  {audit.events && audit.events.length > 0 ? (
+                    <ol className="divide-y divide-slate-100">{audit.events.map((evt, idx) => <li key={idx} className="flex items-start gap-2.5 py-3"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" /><span className="min-w-0 flex-1 break-words text-xs leading-relaxed text-slate-700">{evt.label}</span><span className="shrink-0 text-[11px] tabular-nums text-slate-400">{evt.time}</span></li>)}</ol>
+                  ) : <p className="py-6 text-center text-xs text-slate-500">Waiting for the first activity update.</p>}
+                </div>
+              </section>
+
+              <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="pipeline-tools-title">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3.5"><Layers className="h-4 w-4 text-primary" /><div><h3 id="pipeline-tools-title" className="text-xs font-bold text-slate-900">Security tools</h3><p className="mt-0.5 text-[11px] text-slate-500">Progress shown by assessment stage</p></div></div>
+                <div className="max-h-72 overflow-y-auto px-4" tabIndex={0} aria-label="Security tool list">
+                  {audit.tools?.length ? <ul className="divide-y divide-slate-100">{audit.tools.map((tool, idx) => {
+                    const done = tool.stage < audit.completed;
+                    const active = tool.stage === audit.completed && isRunning;
+                    return <li key={idx} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="break-words text-xs font-semibold text-slate-800">{tool.title}</p><p className="mt-1 break-words text-[11px] leading-relaxed text-slate-500">{tool.detail}</p></div><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>{done ? "Complete" : active ? "Current stage" : "Queued"}</span></li>;
+                  })}</ul> : <p className="py-6 text-center text-xs text-slate-500">No tool information available.</p>}
+                </div>
+              </section>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       <PipelineChecks runs={pipelineRuns} loading={pipelineLoading} loadError={pipelineError} manualStatus={manualPipelineStatus} manualStatusError={manualPipelineError} onRetry={() => void fetchStatus()} onRun={runPipelineChecks} />
