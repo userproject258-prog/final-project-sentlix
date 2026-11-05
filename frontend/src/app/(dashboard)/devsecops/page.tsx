@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { API_URL, apiFetch as fetch } from "@/lib/api";
 import MarkdownReport, { stripEmojis, normalizeMarkdownText } from "@/components/MarkdownReport";
+import { AuditObservations, type AuditFinding } from "@/components/AuditObservations";
 import {
   Shield,
   Activity,
@@ -38,16 +39,6 @@ interface ToolItem {
   detail: string;
 }
 
-interface AuditFinding {
-  id: string;
-  target: string;
-  title: string;
-  severity: string;
-  evidence: string;
-  recommendation: string;
-  status: string;
-}
-
 interface PipelineRun {
   id: string;
   time: string;
@@ -81,6 +72,8 @@ interface AuditState {
 export default function DevSecOpsPage() {
   const [audit, setAudit] = useState<AuditState | null>(null);
   const [findings, setFindings] = useState<AuditFinding[]>([]);
+  const [findingsLoading, setFindingsLoading] = useState(true);
+  const [findingsError, setFindingsError] = useState(false);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
   const [target, setTarget] = useState("");
   const [authorized, setAuthorized] = useState(false);
@@ -108,9 +101,16 @@ export default function DevSecOpsPage() {
     }
     try {
       const response = await fetch(`${API_URL}/api/devsecops/findings`);
-      if (response.ok) setFindings((await response.json()).findings);
+      if (!response.ok) throw new Error("Audit observations unavailable");
+      const data = await response.json();
+      if (!Array.isArray(data.findings)) throw new Error("Invalid observations response");
+      setFindings(data.findings);
+      setFindingsError(false);
     } catch (err) {
       console.error("Failed to fetch audit findings:", err);
+      setFindingsError(true);
+    } finally {
+      setFindingsLoading(false);
     }
     try {
       const response = await fetch(`${API_URL}/api/devsecops/runs`);
@@ -213,15 +213,13 @@ export default function DevSecOpsPage() {
     }
   };
 
-  const resolveFinding = async (finding: AuditFinding) => {
-    try {
-      const response = await fetch(`${API_URL}/api/devsecops/findings/${encodeURIComponent(finding.id)}/resolve`, { method: "POST" });
-      if (!response.ok) throw new Error("Could not resolve finding");
-      await fetchStatus();
-    } catch (err) {
-      console.error(err);
-      alert("Could not resolve this observation. Check the backend connection.");
-    }
+  const resolveFinding = async (finding: AuditFinding): Promise<number> => {
+    const response = await fetch(`${API_URL}/api/devsecops/findings/${encodeURIComponent(finding.id)}/resolve`, { method: "POST" });
+    if (!response.ok) throw new Error("Could not resolve finding");
+    const result = await response.json();
+    setFindings((previous) => previous.map((item) => item.target === finding.target && item.title === finding.title ? { ...item, status: "Resolved" } : item));
+    void fetchStatus();
+    return result.resolved_observations;
   };
 
   const downloadReport = () => {
@@ -690,20 +688,7 @@ export default function DevSecOpsPage() {
           </div>
         ))}
       </details>
-      <details className="bg-surface border border-border rounded-xl p-6 space-y-3">
-        <summary className="text-lg font-semibold cursor-pointer">Recorded audit observations ({findings.length})</summary>
-        <p className="text-sm text-muted">HTTP header, certificate, and input-test observations from completed stages. Injection signals are candidates that require manual validation.</p>
-        {findings.length === 0 && <p className="text-sm text-muted">No structured observations recorded yet.</p>}
-        {findings.map((finding) => (
-          <div key={finding.id} className="border-t border-border pt-3 text-sm">
-            <p className="font-semibold">{finding.title} <span className="text-muted">· {finding.severity} · {finding.status}</span></p>
-            <p className="text-muted break-all">{finding.target}</p>
-            <p>{finding.evidence}</p>
-            <p className="text-muted">{finding.recommendation}</p>
-            {finding.status === "Open" && <button onClick={() => resolveFinding(finding)} className="mt-2 text-primary underline">Mark resolved for this target</button>}
-          </div>
-        ))}
-      </details>
+      <AuditObservations findings={findings} loading={findingsLoading} loadError={findingsError} onRetry={() => void fetchStatus()} onResolve={resolveFinding} />
       {/* Findings Desk & Risk Breakdown */}
       {audit?.report ? (
         <div className="space-y-6">
