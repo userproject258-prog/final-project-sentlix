@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from app.database import get_session, init_db
-from app.models.core import SystemStats, ThreatEvent, AuditFinding
+from app.models.core import SystemStats, ThreatEvent, AuditFinding, AuditLog
 import contextlib
 import json
 import asyncio
@@ -86,8 +86,7 @@ def authenticated_user(token: str, session: Session) -> User | None:
         return None
     return session.get(User, record.user_id)
 
-@app.middleware("http")
-async def require_authentication(request, call_next):
+async def authenticate_request(request, call_next):
     if (not request.url.path.startswith("/api/") or request.method == "OPTIONS" or
             request.url.path in {"/api/auth/login", "/api/auth/register"}):
         return await call_next(request)
@@ -105,7 +104,36 @@ async def require_authentication(request, call_next):
         if user is None:
             return JSONResponse(status_code=401, content={"detail": "Authentication required"})
         request.state.user_id = user.id
+        request.state.audit_user = user.email
     return await call_next(request)
+
+@app.middleware("http")
+async def require_authentication(request: Request, call_next):
+    """Record API write requests without storing their bodies, query strings or credentials."""
+    if not request.url.path.startswith("/api/") or request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return await authenticate_request(request, call_next)
+
+    status_code = 500
+    try:
+        response = await authenticate_request(request, call_next)
+        status_code = response.status_code
+        return response
+    finally:
+        # Route templates avoid persisting user-controlled path parameters.
+        route = request.scope.get("route")
+        route_path = getattr(route, "path", "Unmatched or unauthorized API request")
+        try:
+            with Session(engine) as session:
+                session.add(AuditLog(
+                    user=getattr(request.state, "audit_user", "Unauthenticated"),
+                    action=f"{request.method} {route_path}",
+                    status="Success" if status_code < 400 else "Failure",
+                    status_code=status_code,
+                ))
+                session.commit()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Could not record API activity")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
@@ -674,14 +702,12 @@ async def get_report(report_id: str, session: Session = Depends(get_session)):
     return {"id": report.id, "target": report.target, "content": report.content}
 
 @app.get("/api/audit-logs")
-async def get_audit_logs():
+async def get_audit_logs(session: Session = Depends(get_session)):
+    logs = session.exec(select(AuditLog).order_by(AuditLog.time.desc(), AuditLog.id.desc()).limit(500)).all()
     return {
-        "logs": [
-            {"id": "log-1", "time": "2026-09-24 10:15:00", "user": "admin@sentinelx.io", "action": "Resolved Alert ALT-54321", "status": "Success"},
-            {"id": "log-2", "time": "2026-09-24 09:45:12", "user": "system", "action": "Automated CSPM Scan Completed", "status": "Success"},
-            {"id": "log-3", "time": "2026-09-24 08:30:00", "user": "jdoe@sentinelx.io", "action": "Failed Login Attempt", "status": "Failure"},
-            {"id": "log-4", "time": "2026-09-23 16:20:00", "user": "admin@sentinelx.io", "action": "Blocked IP 10.0.0.19", "status": "Success"},
-        ]
+        "logs": [{"id": log.id, "time": log.time.replace(tzinfo=timezone.utc).isoformat() if log.time.tzinfo is None else log.time.isoformat(),
+                  "user": log.user, "action": log.action, "status": log.status, "status_code": log.status_code}
+                 for log in logs]
     }
 
 _INTEGRATIONS_STATE = [

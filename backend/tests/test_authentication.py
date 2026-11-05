@@ -66,9 +66,9 @@ def test_webhook_requires_valid_github_signature_or_session(database, monkeypatc
         return "permitted"
     request = SimpleNamespace(url=SimpleNamespace(path="/api/devsecops/webhook"), method="POST",
                               headers={"x-hub-signature-256": signature}, state=SimpleNamespace(), body=read_body)
-    assert asyncio.run(main.require_authentication(request, next_handler)) == "permitted"
+    assert asyncio.run(main.authenticate_request(request, next_handler)) == "permitted"
     request.headers["x-hub-signature-256"] = "sha256=invalid"
-    assert asyncio.run(main.require_authentication(request, next_handler)).status_code == 401
+    assert asyncio.run(main.authenticate_request(request, next_handler)).status_code == 401
 
 
 def test_http_middleware_and_signed_webhook_preserve_body(database, monkeypatch):

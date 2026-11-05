@@ -101,3 +101,11 @@ class AuthSession(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     expires_at: datetime
 
+class AuditLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    time: datetime = Field(default_factory=utc_now, index=True)
+    user: str
+    action: str
+    status: str
+    status_code: int
+
