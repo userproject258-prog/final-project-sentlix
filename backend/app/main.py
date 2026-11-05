@@ -916,6 +916,37 @@ async def get_pipeline_runs(session: Session = Depends(get_session)):
 from fastapi import Request
 from app.devsecops.service import trigger_pipeline_scan
 
+_manual_pipeline_status = {"status": "idle", "run_id": None, "error": None}
+_manual_pipeline_task = None
+
+async def _run_manual_pipeline_checks(developer: str):
+    try:
+        result = await asyncio.to_thread(
+            trigger_pipeline_scan, developer=developer,
+            branch="Not specified", commit_sha="Not available",
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Manual pipeline checks failed")
+        _manual_pipeline_status.update(status="failed", run_id=None, error="Pipeline checks could not be completed. Review the backend logs and try again.")
+        return
+    _manual_pipeline_status.update(status="complete", run_id=result["run"]["id"], error=None)
+    await ws_manager.broadcast({"type": "NEW_PIPELINE_RUN", "run": result["run"]})
+
+@app.get("/api/devsecops/runs/manual/status")
+async def manual_pipeline_checks_status():
+    return dict(_manual_pipeline_status)
+
+@app.post("/api/devsecops/runs/manual", status_code=202)
+async def run_manual_pipeline_checks(request: Request):
+    """Start local checks without inventing Git commit or branch metadata."""
+    global _manual_pipeline_task
+    if _manual_pipeline_status["status"] == "running":
+        raise HTTPException(status_code=409, detail="Pipeline checks are already running.")
+    _manual_pipeline_status.update(status="running", run_id=None, error=None)
+    _manual_pipeline_task = asyncio.create_task(_run_manual_pipeline_checks(getattr(request.state, "audit_user", "Authenticated user")))
+    return dict(_manual_pipeline_status)
+
 @app.post("/api/devsecops/webhook")
 async def trigger_pipeline_webhook(request: Request):
     developer = "security-ci@sentinelx.ai"

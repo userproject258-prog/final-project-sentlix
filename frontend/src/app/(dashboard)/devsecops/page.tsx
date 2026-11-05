@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { API_URL, apiFetch as fetch } from "@/lib/api";
 import MarkdownReport, { stripEmojis, normalizeMarkdownText } from "@/components/MarkdownReport";
 import { AuditObservations, type AuditFinding } from "@/components/AuditObservations";
+import { PipelineChecks, type ManualPipelineStatus, type PipelineRun } from "@/components/PipelineChecks";
 import {
   Shield,
   Activity,
@@ -39,17 +40,6 @@ interface ToolItem {
   detail: string;
 }
 
-interface PipelineRun {
-  id: string;
-  time: string;
-  status: string;
-  sast_status: string;
-  secret_status: string;
-  dependency_status: string;
-  container_status: string;
-  details?: { dependencies?: { scope?: string; vulnerabilities?: { package: string; version: string; id: string; fix_versions: string[] }[] } } | null;
-}
-
 interface AuditState {
   status: "idle" | "queued" | "running" | "complete" | "stopped" | "failed";
   completed: number;
@@ -75,6 +65,10 @@ export default function DevSecOpsPage() {
   const [findingsLoading, setFindingsLoading] = useState(true);
   const [findingsError, setFindingsError] = useState(false);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
+  const [pipelineLoading, setPipelineLoading] = useState(true);
+  const [pipelineError, setPipelineError] = useState(false);
+  const [manualPipelineStatus, setManualPipelineStatus] = useState<ManualPipelineStatus | null>(null);
+  const [manualPipelineError, setManualPipelineError] = useState(false);
   const [target, setTarget] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [mode, setMode] = useState<"guided" | "all">("guided");
@@ -114,9 +108,25 @@ export default function DevSecOpsPage() {
     }
     try {
       const response = await fetch(`${API_URL}/api/devsecops/runs`);
-      if (response.ok) setPipelineRuns((await response.json()).runs);
+      if (!response.ok) throw new Error("Pipeline runs unavailable");
+      const data = await response.json();
+      if (!Array.isArray(data.runs)) throw new Error("Invalid pipeline runs response");
+      setPipelineRuns(data.runs);
+      setPipelineError(false);
     } catch (err) {
       console.error("Failed to fetch pipeline runs:", err);
+      setPipelineError(true);
+    } finally {
+      setPipelineLoading(false);
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/devsecops/runs/manual/status`);
+      if (!response.ok) throw new Error("Manual scan status unavailable");
+      setManualPipelineStatus(await response.json());
+      setManualPipelineError(false);
+    } catch (err) {
+      console.error("Failed to fetch manual pipeline status:", err);
+      setManualPipelineError(true);
     }
   }, []);
 
@@ -220,6 +230,17 @@ export default function DevSecOpsPage() {
     setFindings((previous) => previous.map((item) => item.target === finding.target && item.title === finding.title ? { ...item, status: "Resolved" } : item));
     void fetchStatus();
     return result.resolved_observations;
+  };
+
+  const runPipelineChecks = async () => {
+    const response = await fetch(`${API_URL}/api/devsecops/runs/manual`, { method: "POST" });
+    const result = await response.json();
+    if (!response.ok) {
+      void fetchStatus();
+      throw new Error(typeof result.detail === "string" ? result.detail : "Could not start pipeline checks. Please try again.");
+    }
+    setManualPipelineStatus(result);
+    setManualPipelineError(false);
   };
 
   const downloadReport = () => {
@@ -674,20 +695,7 @@ export default function DevSecOpsPage() {
         </div>
       )}
 
-      <details className="bg-surface border border-border rounded-xl p-6 space-y-3">
-        <summary className="text-lg font-semibold cursor-pointer">Pipeline security checks ({pipelineRuns.length})</summary>
-        <p className="text-sm text-muted">Checks run against this backend environment. Container checks inspect configuration; they do not scan a built image.</p>
-        {pipelineRuns.length === 0 && <p className="text-sm text-muted">No pipeline runs recorded.</p>}
-        {pipelineRuns.slice(0, 5).map((run) => (
-          <div key={run.id} className="border-t border-border pt-3 text-sm space-y-1">
-            <p className="font-semibold">{run.id} · {run.status} · {new Date(run.time).toLocaleString()}</p>
-            <p>SAST: {run.sast_status} · Secrets: {run.secret_status} · Python dependencies: {run.dependency_status} · Container configuration: {run.container_status}</p>
-            {run.details?.dependencies?.vulnerabilities?.map((v, index) => (
-              <p key={`${v.package}-${v.id}-${index}`} className="text-red-700">{v.package} {v.version}: {v.id} · Fix versions: {v.fix_versions?.join(", ") || "not listed"}</p>
-            ))}
-          </div>
-        ))}
-      </details>
+      <PipelineChecks runs={pipelineRuns} loading={pipelineLoading} loadError={pipelineError} manualStatus={manualPipelineStatus} manualStatusError={manualPipelineError} onRetry={() => void fetchStatus()} onRun={runPipelineChecks} />
       <AuditObservations findings={findings} loading={findingsLoading} loadError={findingsError} onRetry={() => void fetchStatus()} onResolve={resolveFinding} />
       {/* Findings Desk & Risk Breakdown */}
       {audit?.report ? (
