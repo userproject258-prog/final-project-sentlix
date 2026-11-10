@@ -287,14 +287,8 @@ def _llm_synthesize(prompt: str, system_prompt: str = "You are an elite DevSecOp
         except Exception:
             pass
 
-    api_key = (
-        os.getenv("GEMINI_API_KEY") 
-        or os.getenv("GROQ_API_KEY")
-        or os.getenv("XAI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY") 
-        or os.getenv("GOOGLE_GENAI_API_KEY") 
-        or ""
-    ).strip()
+    from app.assistant.service import get_gemini_api_key
+    api_key = get_gemini_api_key()
     
     if not api_key:
         return ""

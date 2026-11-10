@@ -657,15 +657,15 @@ class AssistantQuery(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     history: list[AssistantMessage] = Field(default_factory=list, max_length=8)
 
-from app.assistant.service import query_assistant, get_gemini_api_key, validate_gemini_api_key
+from app.assistant.service import query_assistant, get_gemini_api_key, validate_gemini_api_key, set_runtime_api_key
 
 @app.post("/api/assistant/query")
-async def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
+def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
     result = query_assistant(query.prompt, session=session, history=[message.model_dump() for message in query.history])
     return result
 
 @app.get("/api/assistant/status")
-async def assistant_status():
+def assistant_status():
     k = get_gemini_api_key()
     is_valid = validate_gemini_api_key(k)
     return {
@@ -730,7 +730,7 @@ class ProfileUpdateRequest(BaseModel):
     name: str
 
 @app.get("/api/settings")
-async def get_settings(request: Request, session: Session = Depends(get_session)):
+def get_settings(request: Request, session: Session = Depends(get_session)):
     k = get_gemini_api_key()
     is_valid = validate_gemini_api_key(k)
     masked = f"{k[:4]}••••••••••••{k[-4:]}" if len(k) > 10 else ("Configured" if k else "Not Set")
@@ -756,9 +756,8 @@ async def get_settings(request: Request, session: Session = Depends(get_session)
     }
 
 @app.post("/api/settings/ai-key")
-async def update_ai_key(req: AIKeyUpdateRequest):
-    clean_key = req.api_key.strip()
-    os.environ["GEMINI_API_KEY"] = clean_key
+def update_ai_key(req: AIKeyUpdateRequest):
+    clean_key = set_runtime_api_key(req.api_key)
     is_valid = validate_gemini_api_key(clean_key)
     masked = f"{clean_key[:4]}••••••••••••{clean_key[-4:]}" if len(clean_key) > 10 else ("Configured" if clean_key else "Not Set")
     return {
