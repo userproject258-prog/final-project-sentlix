@@ -75,15 +75,38 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <section className="space-y-3" aria-label="Attack traffic simulator">
-      <button type="button" onClick={togglePanel} aria-expanded={open} aria-controls="traffic-simulator-form" className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-red-700">
-        <Zap className="h-3.5 w-3.5" /> {open ? "Close Simulator" : "Simulate Attack Traffic"}
-      </button>
+    <section className="rounded-xl border border-border bg-surface shadow-xs overflow-hidden" aria-label="Attack traffic simulator">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-rose-50/60 via-white to-white">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200/80 shrink-0">
+            <Zap className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-xs font-bold text-foreground">Attack & Intrusion Traffic Simulator</h2>
+            <p className="text-[11px] text-muted truncate">
+              Generate synthetic Brute Force, Port Scan, or DoS telemetry to test real-time ML classification
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={togglePanel}
+          aria-expanded={open}
+          aria-controls="traffic-simulator-form"
+          className={`shrink-0 flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all shadow-2xs ${
+            open
+              ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+              : "bg-red-600 text-white hover:bg-red-700"
+          }`}
+        >
+          <Zap className="h-3.5 w-3.5" /> {open ? "Close Simulator" : "Simulate Attack Traffic"}
+        </button>
+      </div>
       {open && (
-        <div id="traffic-simulator-form" className="space-y-4 rounded-xl border border-red-200 bg-white p-4 shadow-xs sm:p-5">
+        <div id="traffic-simulator-form" className="space-y-4 border-t border-border bg-white p-4 sm:p-5">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">Test the intrusion detector</h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted">Creates a synthetic traffic record for the selected target label. No network traffic is sent to the target. The model classifies scenarios as brute force, port scan, DoS, or normal.</p>
+            <h3 className="text-xs font-semibold text-gray-900">Configure Synthetic Attack Scenario</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">Creates a synthetic traffic record for the selected target label. No network traffic is sent to the target. The model classifies scenarios as brute force, port scan, DoS, or normal.</p>
           </div>
           <form onSubmit={simulate} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="flex-1 space-y-1 text-xs font-semibold text-gray-700">
@@ -92,7 +115,7 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
                 const selected = scenarios.find((item) => item.id === event.target.value);
                 setScenarioId(event.target.value);
                 if (selected) setTarget(selected.target);
-              }} className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-900 disabled:opacity-50">
+              }} className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-normal text-gray-900 disabled:opacity-50">
                 {loading && <option>Loading scenarios...</option>}
                 {!loading && scenarios.length === 0 && <option>No scenarios available</option>}
                 {scenarios.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -100,10 +123,10 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
             </label>
             <label className="flex-1 space-y-1 text-xs font-semibold text-gray-700">
               <span>Target label</span>
-              <input required maxLength={200} value={target} onChange={(event) => setTarget(event.target.value)} disabled={simulating || !scenarioId} placeholder="IP address, hostname or service" className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900 disabled:opacity-50" />
+              <input required maxLength={200} value={target} onChange={(event) => setTarget(event.target.value)} disabled={simulating || !scenarioId} placeholder="IP address, hostname or service" className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-normal text-gray-900 disabled:opacity-50" />
             </label>
-            <button type="submit" disabled={loading || simulating || !scenarioId || !target.trim()} className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-              {simulating && <Loader2 className="h-4 w-4 animate-spin" />} {simulating ? "Simulating..." : "Run simulation"}
+            <button type="submit" disabled={loading || simulating || !scenarioId || !target.trim()} className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 shrink-0">
+              {simulating && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {simulating ? "Simulating..." : "Run simulation"}
             </button>
           </form>
           {error && <p role="alert" className="flex items-center gap-2 text-xs text-red-700"><AlertCircle className="h-4 w-4 shrink-0" /> {error} {scenarios.length === 0 && "Close and reopen the simulator to retry."}</p>}
