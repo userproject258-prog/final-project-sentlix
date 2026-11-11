@@ -383,7 +383,7 @@ export default function OverviewPage() {
     setTimeout(() => setCopiedIp((cur) => (cur === text ? null : cur)), 2000);
   };
 
-  const handleCardMouseMove = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const handleCardMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -480,9 +480,23 @@ export default function OverviewPage() {
       )}
 
       {/* Top Header & Executive Controls */}
-      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-surface p-5 rounded-xl border border-border shadow-xs">
-        <div className="flex items-start sm:items-center gap-3.5">
-          <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 text-primary shrink-0 shadow-inner">
+      <div
+        onMouseMove={handleCardMouseMove}
+        className="relative overflow-hidden group flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-surface p-5 rounded-xl border border-border hover:border-blue-400/60 shadow-xs hover:shadow-lg hover:shadow-blue-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out"
+      >
+        {/* Cursor Spotlight Glow */}
+        <div
+          className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+          style={{
+            background:
+              "radial-gradient(350px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.07), transparent 80%)",
+          }}
+        />
+        {/* Top Animated Accent Bar */}
+        <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+        <div className="flex items-start sm:items-center gap-3.5 relative z-10">
+          <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 text-primary shrink-0 shadow-inner group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-300">
             <Activity className="w-6 h-6" />
           </div>
           <div>
@@ -512,11 +526,11 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 relative z-10">
           <button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border border-border bg-white hover:bg-gray-50 text-foreground rounded-lg transition-all shadow-xs disabled:opacity-50 whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border border-border bg-white hover:bg-gray-50 text-foreground rounded-lg transition-all shadow-xs disabled:opacity-50 whitespace-nowrap hover:shadow-sm"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-primary" : "text-muted"}`} />
             <span>{isRefreshing ? "Refreshing..." : "Sync Posture"}</span>
@@ -524,7 +538,7 @@ export default function OverviewPage() {
 
           <Link
             href="/assistant?q=Provide a prioritized remediation plan based on our current security posture"
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-primary hover:bg-blue-700 text-white rounded-lg transition-all shadow-xs whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-primary hover:bg-blue-700 text-white rounded-lg transition-all shadow-xs whitespace-nowrap hover:shadow-md hover:scale-[1.02]"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Ask Copilot</span>
@@ -538,15 +552,29 @@ export default function OverviewPage() {
       {/* EXECUTIVE SECURITY POSTURE SCORECARD BANNER */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* Posture Letter Grade & Overall Risk Score */}
-        <div className="lg:col-span-7 bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between relative overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="lg:col-span-7 relative overflow-hidden group bg-surface border border-border hover:border-orange-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-orange-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(249, 115, 22, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-orange-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border relative z-10">
             <div className="min-w-0">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted block mb-2">
                 Executive Security Posture
               </span>
               <div className="flex items-center gap-3.5">
                 <div
-                  className={`w-16 h-16 shrink-0 rounded-xl border flex flex-col items-center justify-center shadow-2xs ${activeGradeTheme.bg} ${activeGradeTheme.text} ${activeGradeTheme.border}`}
+                  className={`w-16 h-16 shrink-0 rounded-xl border flex flex-col items-center justify-center shadow-2xs group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-300 ${activeGradeTheme.bg} ${activeGradeTheme.text} ${activeGradeTheme.border}`}
                 >
                   <span className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none">
                     GRADE
@@ -564,7 +592,7 @@ export default function OverviewPage() {
 
             <div className="text-left sm:text-right shrink-0 sm:pl-4 sm:border-l sm:border-border/60">
               <span className="text-xs text-muted block whitespace-nowrap">Recorded Risk Index</span>
-              <div className="text-3xl font-extrabold font-mono text-foreground mt-0.5 whitespace-nowrap">
+              <div className="text-3xl font-extrabold font-mono text-foreground mt-0.5 whitespace-nowrap group-hover:translate-x-0.5 transition-transform duration-300">
                 {riskScore}
                 <span className="text-base text-muted/60 font-sans font-normal"> / 100</span>
               </div>
@@ -572,7 +600,7 @@ export default function OverviewPage() {
           </div>
 
           {/* Risk Level Visual Gauge */}
-          <div className="py-4 space-y-2">
+          <div className="py-4 space-y-2 relative z-10">
             <div className="flex justify-between items-center text-xs">
               <span className="text-muted font-medium">Risk Distribution Spectrum</span>
               <span className="font-semibold text-foreground">
@@ -602,8 +630,8 @@ export default function OverviewPage() {
 
           {/* Sub-Pillar Breakdown */}
           {data.posture?.breakdown && (
-            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border">
-              <div className="bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border relative z-10">
+              <div className="bg-gray-50/80 hover:bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
                 <div className="flex justify-between items-center gap-1">
                   <span className="text-[11px] text-muted font-medium truncate">Threat Risk</span>
                   <span className="text-xs font-bold font-mono text-foreground shrink-0">
@@ -618,7 +646,7 @@ export default function OverviewPage() {
                 </div>
               </div>
 
-              <div className="bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+              <div className="bg-gray-50/80 hover:bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
                 <div className="flex justify-between items-center gap-1">
                   <span className="text-[11px] text-muted font-medium truncate">Cloud Posture</span>
                   <span className="text-xs font-bold font-mono text-foreground shrink-0">
@@ -633,7 +661,7 @@ export default function OverviewPage() {
                 </div>
               </div>
 
-              <div className="bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+              <div className="bg-gray-50/80 hover:bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
                 <div className="flex justify-between items-center gap-1">
                   <span className="text-[11px] text-muted font-medium truncate">Audit & Recon</span>
                   <span className="text-xs font-bold font-mono text-foreground shrink-0">
@@ -652,11 +680,25 @@ export default function OverviewPage() {
         </div>
 
         {/* AI Copilot & Fast Remediation Card (White Surface Theme) */}
-        <div className="lg:col-span-5 bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="lg:col-span-5 relative overflow-hidden group bg-surface border border-border hover:border-purple-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(260px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(147, 51, 234, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-border">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg text-primary shrink-0">
+                <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg text-primary shrink-0 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted truncate">
@@ -677,26 +719,26 @@ export default function OverviewPage() {
             <div className="mt-3.5 space-y-2">
               <Link
                 href="/assistant?q=What are the top 3 critical vulnerabilities currently threatening our environment and how can I fix them?"
-                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-primary/40 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group"
+                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-purple-400 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group/link hover:translate-x-0.5"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium text-foreground">💡 &ldquo;What are the top 3 issues threatening our environment?&rdquo;</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover/link:text-purple-600 group-hover/link:translate-x-0.5 transition-all" />
                 </div>
               </Link>
               <Link
                 href="/assistant?q=Generate a defensive IP blocking list for the most active threat actors"
-                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-primary/40 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group"
+                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-purple-400 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group/link hover:translate-x-0.5"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium text-foreground">🛡️ &ldquo;Generate an IP blocklist for top attackers&rdquo;</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover/link:text-purple-600 group-hover/link:translate-x-0.5 transition-all" />
                 </div>
               </Link>
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted">
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
             <span>Ready for autonomous SOC queries</span>
             <Link
               href="/assistant"
@@ -946,16 +988,30 @@ export default function OverviewPage() {
       {/* QUICK ACTION HUBS: ACTIVE ALERTS & CSPM REMEDIATION */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
         {/* Active Incident Triage Banner */}
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-rose-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-rose-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(225, 29, 72, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-rose-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex items-center justify-between gap-2 mb-3.5">
               <div className="flex items-center gap-2 min-w-0">
-                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-300" />
                 <h3 className="text-sm font-bold text-foreground truncate">Active SOC Alerts Requiring Resolution</h3>
               </div>
               <Link
                 href="/alerts"
-                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium whitespace-nowrap shrink-0"
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform"
               >
                 View all ({data.alerts?.active ?? 0}) <ChevronRight className="w-3 h-3" />
               </Link>
@@ -972,7 +1028,7 @@ export default function OverviewPage() {
                 {data.alerts.recent.slice(0, 3).map((alert) => (
                   <div
                     key={alert.id}
-                    className="p-3 rounded-lg border border-border bg-gray-50/60 hover:bg-white transition-colors flex items-center justify-between gap-3"
+                    className="p-3 rounded-lg border border-border bg-gray-50/60 hover:bg-white hover:border-rose-200 hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -997,7 +1053,7 @@ export default function OverviewPage() {
                     <button
                       onClick={() => handleResolveAlert(alert.id, alert.title)}
                       disabled={resolvingAlertId === alert.id}
-                      className="shrink-0 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-400 rounded-md transition-all flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                      className="shrink-0 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-400 rounded-md transition-all flex items-center gap-1 shadow-2xs hover:shadow-xs hover:scale-105 disabled:opacity-50"
                       title="Mark this alert as resolved"
                     >
                       {resolvingAlertId === alert.id ? (
@@ -1013,16 +1069,16 @@ export default function OverviewPage() {
             )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center text-[11px]">
-            <div className="bg-gray-50 rounded-md py-1.5 px-2 border border-gray-100">
+          <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center text-[11px] relative z-10">
+            <div className="bg-gray-50 hover:bg-white rounded-md py-1.5 px-2 border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
               <span className="text-muted block">Active Queue</span>
               <span className="font-mono font-bold text-foreground">{data.alerts?.active ?? 0}</span>
             </div>
-            <div className="bg-rose-50/50 rounded-md py-1.5 px-2 border border-rose-100">
+            <div className="bg-rose-50/50 hover:bg-rose-50 rounded-md py-1.5 px-2 border border-rose-100 hover:border-rose-200 hover:shadow-2xs transition-all duration-200">
               <span className="text-muted block">Critical</span>
               <span className="font-mono font-bold text-rose-700">{data.alerts?.by_severity?.CRITICAL ?? 0}</span>
             </div>
-            <div className="bg-amber-50/50 rounded-md py-1.5 px-2 border border-amber-100">
+            <div className="bg-amber-50/50 hover:bg-amber-50 rounded-md py-1.5 px-2 border border-amber-100 hover:border-amber-200 hover:shadow-2xs transition-all duration-200">
               <span className="text-muted block">High</span>
               <span className="font-mono font-bold text-amber-700">{data.alerts?.by_severity?.HIGH ?? 0}</span>
             </div>
@@ -1030,16 +1086,30 @@ export default function OverviewPage() {
         </div>
 
         {/* Cloud Misconfiguration Remediation Card */}
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex items-center justify-between gap-2 mb-3.5">
               <div className="flex items-center gap-2 min-w-0">
-                <Wrench className="w-4 h-4 text-emerald-600 shrink-0" />
+                <Wrench className="w-4 h-4 text-emerald-600 shrink-0 group-hover:scale-110 group-hover:rotate-12 transition-transform duration-300" />
                 <h3 className="text-sm font-bold text-foreground truncate">Cloud Policy Enforcement (CSPM)</h3>
               </div>
               <Link
                 href="/cspm"
-                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium whitespace-nowrap shrink-0"
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform"
               >
                 Open CSPM ({data.cspm?.open ?? 0} open) <ChevronRight className="w-3 h-3" />
               </Link>
@@ -1047,7 +1117,7 @@ export default function OverviewPage() {
 
             {(!data.cspm?.top_open || data.cspm.top_open.length === 0) ? (
               <div className="p-6 text-center text-muted border border-dashed border-border rounded-lg bg-gray-50/50 flex flex-col items-center justify-center min-h-[168px]">
-                <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80 group-hover:scale-105 transition-transform" />
                 <p className="text-xs font-semibold text-foreground">All Cloud Postures Compliant</p>
                 <p className="text-[11px] text-muted mt-0.5 max-w-xs">
                   Zero open misconfigurations found across monitored AWS, GCP, and Azure resources.
@@ -1055,7 +1125,7 @@ export default function OverviewPage() {
                 <button
                   onClick={handleRunCspmScan}
                   disabled={scanningCspm}
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 transition-colors shadow-2xs disabled:opacity-50"
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 transition-colors shadow-2xs hover:shadow-xs hover:scale-105 disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${scanningCspm ? "animate-spin" : ""}`} />
                   <span>{scanningCspm ? "Scanning Cloud..." : "Re-Scan Cloud Resources"}</span>
@@ -1066,7 +1136,7 @@ export default function OverviewPage() {
                 {data.cspm.top_open.slice(0, 3).map((finding) => (
                   <div
                     key={finding.id}
-                    className="p-3 rounded-lg border border-border bg-gray-50/60 hover:bg-white transition-colors flex items-center justify-between gap-3"
+                    className="p-3 rounded-lg border border-border bg-gray-50/60 hover:bg-white hover:border-emerald-200 hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -1091,7 +1161,7 @@ export default function OverviewPage() {
                     <button
                       onClick={() => handleRemediateCspm(finding.id, finding.resource)}
                       disabled={remediatingCspmId === finding.id}
-                      className="shrink-0 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 hover:border-blue-400 rounded-md transition-all flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                      className="shrink-0 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 hover:border-blue-400 rounded-md transition-all flex items-center gap-1 shadow-2xs hover:shadow-xs hover:scale-105 disabled:opacity-50"
                       title="Enforce secure configuration rule"
                     >
                       {remediatingCspmId === finding.id ? (
@@ -1107,16 +1177,16 @@ export default function OverviewPage() {
             )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center text-[11px]">
-            <div className="bg-emerald-50/50 rounded-md py-1.5 px-2 border border-emerald-100">
+          <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center text-[11px] relative z-10">
+            <div className="bg-emerald-50/50 hover:bg-emerald-50 rounded-md py-1.5 px-2 border border-emerald-100 hover:border-emerald-200 hover:shadow-2xs transition-all duration-200">
               <span className="text-muted block">Posture Score</span>
               <span className="font-mono font-bold text-emerald-700">{data.stats.cloud_security_score}%</span>
             </div>
-            <div className="bg-gray-50 rounded-md py-1.5 px-2 border border-gray-100">
+            <div className="bg-gray-50 hover:bg-white rounded-md py-1.5 px-2 border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
               <span className="text-muted block">Open Drift</span>
               <span className="font-mono font-bold text-foreground">{data.cspm?.open ?? 0}</span>
             </div>
-            <div className="bg-blue-50/50 rounded-md py-1.5 px-2 border border-blue-100">
+            <div className="bg-blue-50/50 hover:bg-blue-50 rounded-md py-1.5 px-2 border border-blue-100 hover:border-blue-200 hover:shadow-2xs transition-all duration-200">
               <span className="text-muted block">Remediated</span>
               <span className="font-mono font-bold text-blue-700">{data.cspm?.resolved ?? 0}</span>
             </div>
@@ -1127,12 +1197,26 @@ export default function OverviewPage() {
       {/* TELEMETRY CHARTS & ATTACK INTEL ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* 14-Day Attack Timeline Stacked Area */}
-        <div className="lg:col-span-7 bg-surface border border-border p-5 rounded-xl shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="lg:col-span-7 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div>
                 <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-primary" /> 14-Day Threat Telemetry Timeline
+                  <Activity className="w-4 h-4 text-primary group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300" /> 14-Day Threat Telemetry Timeline
                 </h2>
                 <p className="text-xs text-muted">Daily distribution of recorded attack incidents by severity</p>
               </div>
@@ -1176,23 +1260,37 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          <div className="pt-3 mt-2 border-t border-border flex items-center justify-between text-xs text-muted">
+          <div className="pt-3 mt-2 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
             <span>Real-time event correlation across network sensors</span>
-            <Link href="/threats" className="text-primary hover:underline font-medium whitespace-nowrap shrink-0">
+            <Link href="/threats" className="text-primary hover:underline font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform">
               Explore Threat Log →
             </Link>
           </div>
         </div>
 
         {/* Attack Vector Distribution */}
-        <div className="lg:col-span-5 bg-surface border border-border p-5 rounded-xl shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="lg:col-span-5 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex items-start justify-between gap-2 mb-4">
               <div className="min-w-0">
                 <h2 className="text-base font-bold text-foreground">Threat Vector Breakdown</h2>
                 <p className="text-xs text-muted">Attack mechanisms classified by SentinelX ML models</p>
               </div>
-              <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0">
+              <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0 group-hover:scale-105 transition-transform">
                 {data.threat_distribution.reduce((acc, curr) => acc + curr.count, 0)} Total
               </span>
             </div>
@@ -1218,9 +1316,9 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          <div className="pt-3 mt-2 border-t border-border flex items-center justify-between gap-2 text-xs text-muted">
+          <div className="pt-3 mt-2 border-t border-border flex items-center justify-between gap-2 text-xs text-muted relative z-10">
             <span className="truncate">Classified with ML Random Forest & Suricata rules</span>
-            <Link href="/analytics" className="text-primary hover:underline font-medium whitespace-nowrap shrink-0">
+            <Link href="/analytics" className="text-primary hover:underline font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform">
               Detailed Analytics →
             </Link>
           </div>
@@ -1230,19 +1328,33 @@ export default function OverviewPage() {
       {/* TOP ATTACKING SOURCES WIDGET & DEVSECOPS/TELEMETRY GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* Top Attacking Sources */}
-        <div className="lg:col-span-7 bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="lg:col-span-7 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(300px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex items-center justify-between gap-2 mb-3.5">
               <div>
                 <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Server className="w-4 h-4 text-primary" /> Top Attacking Sources (Past 30 Days)
+                  <Server className="w-4 h-4 text-primary group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-300" /> Top Attacking Sources (Past 30 Days)
                 </h3>
                 <p className="text-xs text-muted">Click an IP to immediately filter the incidents table below</p>
               </div>
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="text-xs text-muted hover:text-foreground flex items-center gap-1 border border-border px-2.5 py-1 rounded-md whitespace-nowrap shrink-0"
+                  className="text-xs text-muted hover:text-foreground flex items-center gap-1 border border-border px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 hover:bg-gray-50 transition-colors"
                 >
                   Clear filter <X className="w-3 h-3" />
                 </button>
@@ -1258,61 +1370,73 @@ export default function OverviewPage() {
                 {data.top_sources.slice(0, 4).map((actor) => (
                   <div
                     key={actor.source}
-                    className={`p-3 rounded-lg border transition-all text-xs cursor-pointer flex flex-col justify-between ${
+                    onMouseMove={handleCardMouseMove}
+                    className={`relative overflow-hidden group/tile p-3 rounded-lg border transition-all duration-200 text-xs cursor-pointer flex flex-col justify-between hover:shadow-md hover:-translate-y-1 ${
                       searchQuery === actor.source
                         ? "bg-blue-50/70 border-primary shadow-xs ring-1 ring-primary/30"
-                        : "bg-white border-border hover:border-gray-300 hover:bg-gray-50/70"
+                        : "bg-white border-border hover:border-blue-400 hover:bg-blue-50/30"
                     }`}
                     onClick={() => setSearchQuery(actor.source)}
                   >
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-1.5 font-mono font-bold text-foreground">
-                          <span>{actor.source}</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyToClipboard(actor.source);
-                            }}
-                            className="text-muted hover:text-foreground p-0.5"
-                            title="Copy IP"
+                    {/* Inner Tile Spotlight Glow */}
+                    <div
+                      className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/tile:opacity-100 transition-opacity duration-300"
+                      style={{
+                        background:
+                          "radial-gradient(130px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.1), transparent 80%)",
+                      }}
+                    />
+
+                    <div className="relative z-10 flex flex-col justify-between h-full">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5 font-mono font-bold text-foreground">
+                            <span className="group-hover/tile:text-primary transition-colors">{actor.source}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(actor.source);
+                              }}
+                              className="text-muted hover:text-foreground p-0.5 rounded hover:bg-gray-100 transition-colors"
+                              title="Copy IP"
+                            >
+                              {copiedIp === actor.source ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                              actor.max_severity === "CRITICAL"
+                                ? "bg-rose-100 text-rose-700"
+                                : actor.max_severity === "HIGH"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-blue-100 text-blue-700"
+                            }`}
                           >
-                            {copiedIp === actor.source ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
+                            {actor.max_severity}
+                          </span>
                         </div>
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                            actor.max_severity === "CRITICAL"
-                              ? "bg-rose-100 text-rose-700"
-                              : actor.max_severity === "HIGH"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {actor.max_severity}
-                        </span>
+
+                        <div className="flex items-center justify-between text-muted text-[11px]">
+                          <span>
+                            <strong className="text-foreground">{actor.count}</strong>{" "}
+                            {actor.count === 1 ? "event" : "events"}
+                          </span>
+                          <span className="truncate max-w-[150px] text-right font-medium text-foreground/80">
+                            {actor.types.join(", ")}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-muted text-[11px]">
-                        <span>
-                          <strong className="text-foreground">{actor.count}</strong>{" "}
-                          {actor.count === 1 ? "event" : "events"}
+                      <div className="mt-2 pt-1.5 border-t border-border/60 flex items-center justify-between text-[10px] text-muted">
+                        <span className={actor.simulated ? "text-blue-600 font-medium" : "text-emerald-700 font-medium"}>
+                          {actor.simulated ? "Simulated Traffic" : "Recorded Traffic"}
                         </span>
-                        <span className="truncate max-w-[150px] text-right font-medium text-foreground/80">
-                          {actor.types.join(", ")}
-                        </span>
+                        <span className="group-hover/tile:text-primary font-medium transition-colors">Click to filter ↓</span>
                       </div>
-                    </div>
-
-                    <div className="mt-2 pt-1.5 border-t border-border/60 flex items-center justify-between text-[10px] text-muted">
-                      <span className={actor.simulated ? "text-blue-600 font-medium" : "text-emerald-700 font-medium"}>
-                        {actor.simulated ? "Simulated Traffic" : "Recorded Traffic"}
-                      </span>
-                      <span className="hover:text-primary">Click to filter ↓</span>
                     </div>
                   </div>
                 ))}
@@ -1320,25 +1444,39 @@ export default function OverviewPage() {
             )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted">
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
             <span>Showing top {Math.min(4, data.top_sources?.length ?? 0)} persistent source IPs</span>
-            <Link href="/threats" className="text-primary hover:underline font-medium whitespace-nowrap">
+            <Link href="/threats" className="text-primary hover:underline font-medium whitespace-nowrap hover:translate-x-0.5 transition-transform">
               Full IP Reputation List →
             </Link>
           </div>
         </div>
 
         {/* Live System Performance & Telemetry */}
-        <div className="lg:col-span-5 bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
+        <div
+          onMouseMove={handleCardMouseMove}
+          className="lg:col-span-5 relative overflow-hidden group bg-surface border border-border hover:border-indigo-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.08), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10">
             <div className="flex items-center justify-between gap-2 mb-4">
               <div>
                 <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-primary" /> System Resource Telemetry
+                  <Cpu className="w-4 h-4 text-primary group-hover:scale-110 group-hover:rotate-12 transition-transform duration-300" /> System Resource Telemetry
                 </h3>
                 <p className="text-xs text-muted">Real-time health of SentinelX inspection engine</p>
               </div>
-              <Link href="/monitoring" className="text-xs text-primary hover:underline font-medium whitespace-nowrap shrink-0">
+              <Link href="/monitoring" className="text-xs text-primary hover:underline font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform">
                 All metrics →
               </Link>
             </div>
@@ -1378,48 +1516,96 @@ export default function OverviewPage() {
 
               {/* 2x2 Sub-Telemetry Grid */}
               <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-border">
-                  <span className="text-[10px] text-muted uppercase font-semibold block">Gateway Latency</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-xs font-bold text-emerald-700">
-                      {data.system?.api_latency ?? 12.3} ms
-                    </span>
-                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                <div
+                  onMouseMove={handleCardMouseMove}
+                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-emerald-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div
+                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
+                    style={{
+                      background:
+                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
+                    }}
+                  />
+                  <div className="relative z-10">
+                    <span className="text-[10px] text-muted uppercase font-semibold block">Gateway Latency</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="font-mono text-xs font-bold text-emerald-700">
+                        {data.system?.api_latency ?? 12.3} ms
+                      </span>
+                      <Clock className="w-3.5 h-3.5 text-emerald-600 group-hover/sub:scale-110 transition-transform" />
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-border">
-                  <span className="text-[10px] text-muted uppercase font-semibold block">Net RX / TX</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-xs font-bold text-foreground">
-                      {data.system?.network_rx ?? 124} / {data.system?.network_tx ?? 86} KB/s
-                    </span>
-                    <Activity className="w-3.5 h-3.5 text-blue-600" />
+                <div
+                  onMouseMove={handleCardMouseMove}
+                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-blue-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div
+                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
+                    style={{
+                      background:
+                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.09), transparent 80%)",
+                    }}
+                  />
+                  <div className="relative z-10">
+                    <span className="text-[10px] text-muted uppercase font-semibold block">Net RX / TX</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {data.system?.network_rx ?? 124} / {data.system?.network_tx ?? 86} KB/s
+                      </span>
+                      <Activity className="w-3.5 h-3.5 text-blue-600 group-hover/sub:scale-110 transition-transform" />
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-border">
-                  <span className="text-[10px] text-muted uppercase font-semibold block">Recon Findings</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-xs font-bold text-foreground">
-                      {data.stats.open_audit_findings ?? data.audit?.open ?? 0} Open
-                    </span>
-                    <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                <div
+                  onMouseMove={handleCardMouseMove}
+                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-indigo-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div
+                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
+                    style={{
+                      background:
+                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.09), transparent 80%)",
+                    }}
+                  />
+                  <div className="relative z-10">
+                    <span className="text-[10px] text-muted uppercase font-semibold block">Recon Findings</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {data.stats.open_audit_findings ?? data.audit?.open ?? 0} Open
+                      </span>
+                      <Shield className="w-3.5 h-3.5 text-indigo-600 group-hover/sub:scale-110 transition-transform" />
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-border">
-                  <span className="text-[10px] text-muted uppercase font-semibold block">ML Classifier</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-xs font-bold text-emerald-700">Online</span>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <div
+                  onMouseMove={handleCardMouseMove}
+                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-emerald-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div
+                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
+                    style={{
+                      background:
+                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
+                    }}
+                  />
+                  <div className="relative z-10">
+                    <span className="text-[10px] text-muted uppercase font-semibold block">ML Classifier</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="font-mono text-xs font-bold text-emerald-700">Online</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 group-hover/sub:scale-110 transition-transform" />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted">
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> All container pods healthy
             </span>
@@ -1429,7 +1615,22 @@ export default function OverviewPage() {
       </div>
 
       {/* RECENT CRITICAL EVENTS TABLE (INTERACTIVE COMMAND CENTER) */}
-      <div className="bg-surface border border-border rounded-xl shadow-xs overflow-hidden">
+      <div
+        onMouseMove={handleCardMouseMove}
+        className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/60 rounded-xl shadow-xs hover:shadow-md transition-all duration-300 ease-out"
+      >
+        {/* Cursor Spotlight Glow */}
+        <div
+          className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+          style={{
+            background:
+              "radial-gradient(400px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.04), transparent 80%)",
+          }}
+        />
+        {/* Top Animated Accent Bar */}
+        <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+        <div className="relative z-10">
         {/* Table Header & Interactive Search/Filters */}
         <div className="p-5 border-b border-border bg-white flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="min-w-0">
@@ -1655,5 +1856,6 @@ export default function OverviewPage() {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
