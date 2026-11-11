@@ -278,64 +278,226 @@ async def get_overview(session: Session = Depends(get_session)):
         session.commit()
         session.refresh(stats)
 
-    # Fetch recent threat events (most recent first)
-    events = session.exec(select(ThreatEvent).order_by(ThreatEvent.time.desc()).limit(10)).all()
-    all_events = session.exec(select(ThreatEvent)).all()
-    
-    # Calculate real-time counts from DB
-    type_counts: dict[str, int] = {}
+    from app.models.core import CSPMFinding, Alert, PipelineRun, AuditReport, SystemMetric
+    from app.assistant.service import get_gemini_api_key
+
+    now = datetime.now(timezone.utc)
+    closed_states = {"resolved", "closed", "dismissed"}
+    severities = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+    def _aware(dt):
+        if dt is None:
+            return now
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+    def _iso(dt):
+        return _aware(dt).isoformat() if dt else None
+
+    def _sev(value):
+        return (value or "").strip().upper()
+
+    def _is_open(status_value):
+        return (status_value or "").strip().lower() not in closed_states
+
+    # ---------------- Threat events ----------------
+    all_events = sorted(session.exec(select(ThreatEvent)).all(), key=lambda e: _aware(e.time), reverse=True)
+    open_events = [e for e in all_events if _is_open(e.status)]
     total_threats = len(all_events)
-    critical_count = sum(1 for e in all_events if e.severity.upper() == "CRITICAL")
+    critical_count = sum(1 for e in all_events if _sev(e.severity) == "CRITICAL")
+    open_critical = sum(1 for e in open_events if _sev(e.severity) == "CRITICAL")
 
+    last7 = [e for e in all_events if _aware(e.time) >= now - timedelta(days=7)]
+    prev7 = [e for e in all_events if now - timedelta(days=14) <= _aware(e.time) < now - timedelta(days=7)]
+    last24 = [e for e in all_events if _aware(e.time) >= now - timedelta(hours=24)]
+
+    def _delta(current: int, previous: int) -> dict:
+        diff = current - previous
+        direction = "up" if diff > 0 else "down" if diff < 0 else "flat"
+        return {"direction": direction, "value": f"{diff:+d}", "current": current, "previous": previous}
+
+    threats_trend = _delta(len(last7), len(prev7))
+    critical_trend = _delta(sum(1 for e in last7 if _sev(e.severity) == "CRITICAL"),
+                            sum(1 for e in prev7 if _sev(e.severity) == "CRITICAL"))
+
+    type_counts: dict[str, int] = {}
     for evt in all_events:
-        t = evt.type or "Anomaly"
-        type_counts[t] = type_counts.get(t, 0) + 1
+        label = evt.type or "Anomaly"
+        type_counts[label] = type_counts.get(label, 0) + 1
+    threat_distribution = [{"label": k, "count": v} for k, v in sorted(type_counts.items(), key=lambda kv: kv[1], reverse=True)]
 
-    # Format threat distribution dynamically
-    if type_counts:
-        threat_distribution = [{"label": k, "count": v} for k, v in type_counts.items()]
-    else:
-        threat_distribution = []
+    severity_distribution = [{"name": s.title(), "key": s, "value": sum(1 for e in open_events if _sev(e.severity) == s)}
+                             for s in severities]
 
-    # Calculate real risk score based on active critical/high threats and cloud score
-    risk = calculate_recorded_risk(session)
-    calculated_risk_score = risk["overall_risk"]
-
-    # Generate dynamic 7-day risk trend ending at today's score
-    # Daily recorded threat weight, not a historical overall risk score.
+    # Daily recorded threat weight for the last 7 days (kept for compatibility)
     risk_trend = []
     for i in range(6, -1, -1):
-        day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
-        score = min(100, sum(_severity_weight(e.severity) for e in all_events if e.time.date() == day))
+        day = (now - timedelta(days=i)).date()
+        score = min(100, sum(_severity_weight(e.severity) for e in all_events if _aware(e.time).date() == day))
         risk_trend.append({"date": day.isoformat(), "score": score})
 
+    # 14-day stacked severity timeline
+    timeline = []
+    for i in range(13, -1, -1):
+        day = (now - timedelta(days=i)).date()
+        day_events = [e for e in all_events if _aware(e.time).date() == day]
+        row = {"date": day.isoformat(), "label": day.strftime("%b %d")}
+        for s in severities:
+            row[s.lower()] = sum(1 for e in day_events if _sev(e.severity) == s)
+        row["total"] = len(day_events)
+        timeline.append(row)
+
+    # Top attacking sources (last 30 days)
+    source_stats: dict[str, dict] = {}
+    for evt in all_events:
+        if _aware(evt.time) < now - timedelta(days=30):
+            continue
+        src = evt.source or "Unknown"
+        entry = source_stats.setdefault(src, {"source": src, "count": 0, "max_severity": "LOW",
+                                              "last_seen": _iso(evt.time), "types": set(), "simulated": True})
+        entry["count"] += 1
+        entry["types"].add(evt.type or "Anomaly")
+        entry["simulated"] = entry["simulated"] and bool(getattr(evt, "simulated", False))
+        if _severity_weight(_sev(evt.severity)) > _severity_weight(entry["max_severity"]):
+            entry["max_severity"] = _sev(evt.severity)
+    top_sources = sorted(source_stats.values(), key=lambda x: (x["count"], _severity_weight(x["max_severity"])), reverse=True)[:6]
+    for entry in top_sources:
+        entry["types"] = sorted(entry["types"])
+
+    # ---------------- Risk ----------------
+    risk = calculate_recorded_risk(session)
+    calculated_risk_score = risk["overall_risk"]
+    grade = ("A" if calculated_risk_score < 20 else "B" if calculated_risk_score < 40 else
+             "C" if calculated_risk_score < 60 else "D" if calculated_risk_score < 80 else "F")
+    posture_label = {"A": "Strong", "B": "Good", "C": "Elevated", "D": "High Risk", "F": "Critical"}[grade]
+
+    # ---------------- Cloud posture (CSPM) ----------------
+    cspm_findings = session.exec(select(CSPMFinding)).all()
+    cspm_open = [f for f in cspm_findings if _is_open(f.status)]
+    cloud_score = max(0, 100 - risk["breakdown"]["cloud_risk"] * 2)
+    cspm_summary = {
+        "score": cloud_score,
+        "total": len(cspm_findings),
+        "open": len(cspm_open),
+        "resolved": len(cspm_findings) - len(cspm_open),
+        "by_severity": {s: sum(1 for f in cspm_open if _sev(f.severity) == s) for s in severities},
+        "last_scan": _iso(max((f.time for f in cspm_findings), key=_aware)) if cspm_findings else None,
+        "top_open": [{"id": f.id, "finding": f.finding, "resource": f.resource, "severity": _sev(f.severity)}
+                     for f in sorted(cspm_open, key=lambda f: _severity_weight(_sev(f.severity)), reverse=True)[:4]],
+    }
+
+    # ---------------- Alerts ----------------
+    alerts = sorted(session.exec(select(Alert)).all(), key=lambda a: _aware(a.time), reverse=True)
+    active_alerts = [a for a in alerts if _is_open(a.status)]
+    alerts_summary = {
+        "active": len(active_alerts),
+        "total": len(alerts),
+        "by_severity": {s: sum(1 for a in active_alerts if _sev(a.severity) == s) for s in severities},
+        "recent": [{"id": a.id, "title": a.title, "severity": _sev(a.severity), "source": a.source,
+                    "message": a.message, "status": a.status, "time": _iso(a.time)} for a in active_alerts[:6]],
+    }
+
+    # ---------------- DevSecOps audit ----------------
+    audit_findings = session.exec(select(AuditFinding)).all()
+    unique_open_audit = {}
+    for f in sorted(audit_findings, key=lambda f: _aware(f.time)):
+        if _is_open(f.status):
+            unique_open_audit[(f.target, f.title)] = f
+        else:
+            unique_open_audit.pop((f.target, f.title), None)
+    open_audit = list(unique_open_audit.values())
+    latest_report = session.exec(select(AuditReport).order_by(AuditReport.time.desc())).first()
+    audit_summary = {
+        "open": len(open_audit),
+        "total": len(audit_findings),
+        "by_severity": {s: sum(1 for f in open_audit if _sev(f.severity) == s) for s in severities},
+        "latest_report": ({"id": latest_report.id, "target": latest_report.target, "time": _iso(latest_report.time),
+                           "completed_stages": latest_report.completed_stages} if latest_report else None),
+        "top_open": [{"id": f.id, "title": f.title, "target": f.target, "severity": _sev(f.severity)}
+                     for f in sorted(open_audit, key=lambda f: _severity_weight(_sev(f.severity)), reverse=True)[:4]],
+    }
+
+    # ---------------- CI/CD pipeline ----------------
+    runs = session.exec(select(PipelineRun).order_by(PipelineRun.time.desc()).limit(20)).all()
+    passed_runs = sum(1 for r in runs if (r.status or "").upper() in {"PASSED", "SUCCESS", "PASS"})
+    pipeline_summary = {
+        "total": len(runs),
+        "passed": passed_runs,
+        "failed": sum(1 for r in runs if (r.status or "").upper() in {"FAILED", "FAIL", "ERROR"}),
+        "pass_rate": round(passed_runs * 100 / len(runs)) if runs else None,
+        "recent": [{"id": r.id, "commit_sha": r.commit_sha, "branch": r.branch, "developer": r.developer,
+                    "status": r.status, "time": _iso(r.time)} for r in runs[:5]],
+    }
+
+    # ---------------- System & AI ----------------
+    latest_metric = session.exec(select(SystemMetric).order_by(SystemMetric.time.desc())).first()
+    system_summary = ({"cpu_usage": round(latest_metric.cpu_usage, 1), "memory_usage": round(latest_metric.memory_usage, 1),
+                       "api_latency": round(latest_metric.api_latency, 1), "time": _iso(latest_metric.time)}
+                      if latest_metric else None)
+    ai_key = get_gemini_api_key()
+
     return {
+        "generated_at": now.isoformat(),
         "stats": {
             "threats": total_threats,
+            "open_threats": len(open_events),
+            "threats_24h": len(last24),
             "critical": critical_count,
+            "open_critical": open_critical,
             "risk_score": calculated_risk_score,
-            "cloud_security_score": max(0, 100 - risk["breakdown"]["cloud_risk"] * 2),
+            "cloud_security_score": cloud_score,
+            "active_alerts": len(active_alerts),
+            "open_audit_findings": len(open_audit),
+            "pipeline_pass_rate": pipeline_summary["pass_rate"],
         },
+        "posture": {"grade": grade, "label": posture_label, "breakdown": risk["breakdown"], "top_assets": risk["top_assets"][:6]},
         "trends": {
-            "threats": {"direction": stats.threats_trend, "value": stats.threats_trend_value},
-            "critical": {"direction": stats.critical_trend, "value": stats.critical_trend_value},
-            "cloud_security_score": {"direction": stats.cloud_trend, "value": stats.cloud_trend_value},
+            "threats": threats_trend,
+            "critical": critical_trend,
+            "cloud_security_score": {"direction": "flat", "value": f"{len(cspm_open)} open", "current": len(cspm_open), "previous": len(cspm_open)},
         },
         "threat_distribution": threat_distribution,
+        "severity_distribution": severity_distribution,
+        "timeline": timeline,
+        "top_sources": top_sources,
+        "cspm": cspm_summary,
+        "alerts": alerts_summary,
+        "audit": audit_summary,
+        "pipeline": pipeline_summary,
+        "system": system_summary,
+        "ai": {"configured": bool(ai_key), "engine": "Google gemini-2.5-flash" if ai_key else "Local recorded-data summary"},
         "recent_events": [
             {
                 "id": evt.id,
                 "time": evt.time.strftime("%H:%M:%S") if evt.time else "Just now",
+                "timestamp": _iso(evt.time),
                 "type": evt.type,
                 "source": evt.source,
+                "destination": getattr(evt, "destination", None) or _default_destination(evt.type),
+                "confidence": _default_confidence(evt),
                 "severity": evt.severity,
                 "status": evt.status,
-                "simulated": evt.simulated,
+                "simulated": bool(getattr(evt, "simulated", False)),
             }
-            for evt in events
+            for evt in all_events[:10]
         ],
         "risk_trend": risk_trend
     }
+
+
+class ThreatStatusUpdate(BaseModel):
+    status: Literal["Open", "Investigating", "Resolved"]
+
+
+@app.post("/api/threats/{threat_id}/status")
+async def update_threat_status(threat_id: str, req: ThreatStatusUpdate, session: Session = Depends(get_session)):
+    event = session.get(ThreatEvent, threat_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Threat event not found")
+    event.status = req.status
+    session.add(event)
+    session.commit()
+    await ws_manager.broadcast({"type": "THREAT_STATUS_UPDATED", "threat_id": threat_id, "status": req.status})
+    return {"status": "success", "threat": {"id": event.id, "status": event.status}}
 
 from pydantic import BaseModel
 
