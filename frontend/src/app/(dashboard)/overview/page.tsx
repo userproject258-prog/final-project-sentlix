@@ -643,24 +643,24 @@ export default function OverviewPage() {
           )}
         </div>
 
-        {/* AI Copilot & Fast Remediation Card */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-xl p-5 shadow-xs flex flex-col justify-between">
+        {/* AI Copilot & Fast Remediation Card (White Surface Theme) */}
+        <div className="lg:col-span-5 bg-surface border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-border">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1.5 bg-indigo-500/20 border border-indigo-400/30 rounded-lg text-indigo-300 shrink-0">
+                <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg text-primary shrink-0">
                   <Sparkles className="w-4 h-4" />
                 </div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-indigo-200 truncate">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted truncate">
                   Autonomous SecOps Copilot
                 </span>
               </div>
-              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-indigo-900/70 border border-indigo-700/60 text-indigo-200 whitespace-nowrap shrink-0">
+              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 font-semibold whitespace-nowrap shrink-0">
                 {data.ai?.engine?.replace("Google ", "") || "gemini-2.5-flash"}
               </span>
             </div>
 
-            <p className="text-xs sm:text-sm font-medium text-slate-100 leading-relaxed">
+            <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
               {riskScore >= 70
                 ? "Elevated threats detected in network ingress and public cloud configurations. Prompt Copilot to draft defensive firewall rules."
                 : "Continuous telemetry active. All high-severity incidents are prioritized for triage and policy verification."}
@@ -669,30 +669,30 @@ export default function OverviewPage() {
             <div className="mt-3.5 space-y-2">
               <Link
                 href="/assistant?q=What are the top 3 critical vulnerabilities currently threatening our environment and how can I fix them?"
-                className="w-full block text-left text-xs bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 rounded-lg p-2.5 transition-all group"
+                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-primary/40 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate">💡 &ldquo;What are the top 3 issues threatening our environment?&rdquo;</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                  <span className="truncate font-medium text-foreground">💡 &ldquo;What are the top 3 issues threatening our environment?&rdquo;</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                 </div>
               </Link>
               <Link
                 href="/assistant?q=Generate a defensive IP blocking list for the most active threat actors"
-                className="w-full block text-left text-xs bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 rounded-lg p-2.5 transition-all group"
+                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-primary/40 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate">🛡️ &ldquo;Generate an IP blocklist for top attackers&rdquo;</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                  <span className="truncate font-medium text-foreground">🛡️ &ldquo;Generate an IP blocklist for top attackers&rdquo;</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                 </div>
               </Link>
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted">
             <span>Ready for autonomous SOC queries</span>
             <Link
               href="/assistant"
-              className="text-xs font-semibold text-indigo-300 hover:text-white flex items-center gap-1 transition-colors whitespace-nowrap"
+              className="text-xs font-semibold text-primary hover:text-blue-700 flex items-center gap-1 transition-colors whitespace-nowrap"
             >
               Open Copilot Chat <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
