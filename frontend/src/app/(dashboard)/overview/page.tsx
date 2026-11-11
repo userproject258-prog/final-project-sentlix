@@ -383,6 +383,14 @@ export default function OverviewPage() {
     setTimeout(() => setCopiedIp((cur) => (cur === text ? null : cur)), 2000);
   };
 
+  const handleCardMouseMove = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    e.currentTarget.style.setProperty("--mouse-x", `${x}px`);
+    e.currentTarget.style.setProperty("--mouse-y", `${y}px`);
+  };
+
   // Filtered recent events
   const recentEvents = data?.recent_events ?? [];
   const filteredEvents = recentEvents.filter((evt) => {
@@ -700,23 +708,37 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* 5 INTERACTIVE TOP KPI CARDS */}
+      {/* 5 INTERACTIVE TOP KPI CARDS WITH CURSOR-TRACKING HOVER EFFECT */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: Total Threats */}
         <Link
           href="/threats"
-          className="group bg-surface border border-border hover:border-primary/40 rounded-xl p-4 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-3">
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.09), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Total Threats</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-primary group-hover:text-white transition-colors">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-primary group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
               <Shield className="w-4 h-4" />
             </div>
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-foreground">{data.stats.threats}</span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+              <span className="text-2xl font-bold font-mono text-foreground transition-transform duration-300 group-hover:translate-x-0.5">
+                {data.stats.threats}
+              </span>
+              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-primary group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-xs text-muted">
               {data.trends.threats?.direction === "up" ? (
@@ -744,18 +766,32 @@ export default function OverviewPage() {
         {/* Card 2: Critical Events */}
         <Link
           href="/threats"
-          className="group bg-surface border border-border hover:border-red-300 rounded-xl p-4 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-red-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-red-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-3">
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(220, 38, 38, 0.09), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-red-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Critical Events</span>
-            <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-colors">
+            <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-red-600">{data.stats.critical}</span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-red-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+              <span className="text-2xl font-bold font-mono text-red-600 transition-transform duration-300 group-hover:translate-x-0.5">
+                {data.stats.critical}
+              </span>
+              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-red-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-xs text-muted">
               {data.trends.critical?.direction === "up" ? (
@@ -782,20 +818,32 @@ export default function OverviewPage() {
         {/* Card 3: Cloud Security Posture (CSPM) */}
         <Link
           href="/cspm"
-          className="group bg-surface border border-border hover:border-emerald-300 rounded-xl p-4 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-3">
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Cloud Posture</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
               <Cloud className="w-4 h-4" />
             </div>
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-emerald-600">
+              <span className="text-2xl font-bold font-mono text-emerald-600 transition-transform duration-300 group-hover:translate-x-0.5">
                 {data.stats.cloud_security_score}%
               </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-emerald-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-emerald-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
             </div>
             <div className="mt-2 text-xs text-muted">
               <span className="font-semibold text-foreground">
@@ -811,20 +859,32 @@ export default function OverviewPage() {
         {/* Card 4: Active SOC Alerts */}
         <Link
           href="/alerts"
-          className="group bg-surface border border-border hover:border-amber-300 rounded-xl p-4 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-amber-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-3">
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(217, 119, 6, 0.09), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-amber-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Active Alerts</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
               <AlertCircle className="w-4 h-4" />
             </div>
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-foreground">
+              <span className="text-2xl font-bold font-mono text-foreground transition-transform duration-300 group-hover:translate-x-0.5">
                 {data.stats.active_alerts ?? data.alerts?.active ?? 0}
               </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-amber-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-amber-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
             </div>
             <div className="mt-2 text-xs text-muted flex items-center gap-1.5">
               <span className="font-semibold text-rose-600">
@@ -844,20 +904,32 @@ export default function OverviewPage() {
         {/* Card 5: DevSecOps CI/CD Scanner */}
         <Link
           href="/devsecops"
-          className="group bg-surface border border-border hover:border-purple-300 rounded-xl p-4 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-purple-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-3">
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(147, 51, 234, 0.09), transparent 80%)",
+            }}
+          />
+          {/* Top Animated Accent Bar */}
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">CI/CD Pass Rate</span>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
+            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
               <GitBranch className="w-4 h-4" />
             </div>
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-purple-700">
+              <span className="text-2xl font-bold font-mono text-purple-700 transition-transform duration-300 group-hover:translate-x-0.5">
                 {effectivePassRate !== null && effectivePassRate !== undefined ? `${effectivePassRate}%` : "Active"}
               </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-purple-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-purple-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
             </div>
             <div className="mt-2 text-xs text-muted">
               <span className="font-semibold text-foreground">
