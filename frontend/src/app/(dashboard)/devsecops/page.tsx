@@ -403,17 +403,19 @@ export default function DevSecOpsPage() {
                   <input type="text" id="audit-target" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="https://app.example.com" className="w-full rounded-lg border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-500 transition-all" disabled={isRunning} required aria-describedby="audit-target-hint" />
                 </div>
                 <p id="audit-target-hint" className="mt-1.5 text-[11px] text-slate-500">Enter a domain, IP address, or full URL.</p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-slate-400">Deep Scan Capabilities:</span>
-                  {["Soft-404 Filter", "JS Secret Mining", "LFI & Time-Blind SQLi", "Sitemap Crawl", "TLS/X.509 Check"].map((cap) => (
-                    <span key={cap} className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-[10px] font-medium text-slate-600">
-                      {cap}
-                    </span>
-                  ))}
+                <div className="mt-2.5 flex flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Deep Scan Capabilities</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {["Soft-404 Filter", "JS Secret Mining", "LFI & Time-Blind SQLi", "Sitemap Crawl", "TLS/X.509 Check"].map((cap) => (
+                      <span key={cap} className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200/80 text-[10px] font-medium text-slate-600 whitespace-nowrap">
+                        {cap}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <fieldset disabled={isRunning}>
+              <fieldset disabled={isRunning} className="min-w-0">
                 <legend className="mb-2 block text-xs font-semibold text-slate-700">Scanning depth profile</legend>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                   {[
@@ -421,16 +423,42 @@ export default function DevSecOpsPage() {
                     { value: "deep" as const, label: "Deep Reconnaissance", badge: "Recommended", description: "95+ cloud/config paths, JS secrets, sitemap, LFI & blind SQLi." },
                     { value: "aggressive" as const, label: "Aggressive Suite", badge: "Exhaustive", description: "Max concurrency, extended payloads & full auth/DoS probes." },
                   ].map((opt) => (
-                    <label key={opt.value} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-all duration-200 ${scanDepth === opt.value ? "border-cyan-500 bg-cyan-50/60 shadow-xs ring-1 ring-cyan-500/30" : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50/80"} ${isRunning ? "cursor-not-allowed opacity-60" : ""}`}>
-                      <input type="radio" name="scanDepth" value={opt.value} checked={scanDepth === opt.value} onChange={() => setScanDepth(opt.value)} className="mt-0.5 h-4 w-4 accent-cyan-600" />
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
-                          {opt.label}
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${opt.value === "deep" ? "bg-cyan-100 text-cyan-800" : opt.value === "aggressive" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"}`}>
-                            {opt.badge}
-                          </span>
+                    <label
+                      key={opt.value}
+                      className={`flex min-w-0 flex-col gap-2 rounded-xl border p-3.5 transition-all duration-200 overflow-hidden ${
+                        scanDepth === opt.value
+                          ? "border-cyan-500 bg-cyan-50/60 shadow-xs ring-1 ring-cyan-500/30"
+                          : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50/80"
+                      } ${isRunning ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                    >
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <input
+                          type="radio"
+                          name="scanDepth"
+                          value={opt.value}
+                          checked={scanDepth === opt.value}
+                          onChange={() => setScanDepth(opt.value)}
+                          className="h-4 w-4 shrink-0 accent-cyan-600"
+                        />
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                            opt.value === "deep"
+                              ? "bg-cyan-100 text-cyan-800"
+                              : opt.value === "aggressive"
+                              ? "bg-rose-100 text-rose-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {opt.badge}
                         </span>
-                        <span className="mt-1 block text-[11px] leading-snug text-slate-500">{opt.description}</span>
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-xs font-bold leading-snug text-slate-900">
+                          {opt.label}
+                        </span>
+                        <span className="mt-1 block text-[11px] leading-relaxed text-slate-500">
+                          {opt.description}
+                        </span>
                       </span>
                     </label>
                   ))}

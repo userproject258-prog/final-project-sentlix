@@ -299,7 +299,7 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
                 RF-IDS Stress & Benchmark
               </span>
             </div>
-            <p className="text-xs text-muted mt-0.5 truncate">
+            <p className="text-xs text-muted mt-0.5 leading-relaxed">
               Replay MITRE attack vectors, craft custom flow payloads, or run full 10-vector ML detection benchmarks
             </p>
           </div>
@@ -324,7 +324,7 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
         <div id="traffic-simulator-form" className="relative z-10 space-y-5 border-t border-border bg-slate-50/40 p-5">
           {/* Sub-navigation Tabs */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-1 bg-white p-1 rounded-xl border border-border shadow-2xs">
+            <div className="inline-flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-border shadow-2xs">
               {[
                 { id: "scenarios", label: "Scenario Replay", icon: Crosshair },
                 { id: "custom", label: "Custom Vector Lab", icon: Sliders },
