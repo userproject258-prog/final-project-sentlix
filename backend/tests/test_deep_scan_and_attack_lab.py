@@ -83,3 +83,4 @@ def test_attack_detection_benchmark_suite():
         # Ensure dry-run benchmark did not write ThreatEvents
         assert len(session.exec(select(ThreatEvent)).all()) == 0
     engine.dispose()
+
