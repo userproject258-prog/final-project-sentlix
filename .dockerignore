@@ -1,0 +1,13 @@
+.git/
+node_modules/
+frontend/node_modules/
+frontend/.next/
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+devsecops_ai_security_audit_tool_v6_crewai-project/
