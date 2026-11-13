@@ -2,8 +2,8 @@
 
 import { API_URL, apiFetch as fetch } from "@/lib/api";
 
-import { useState, useRef, useEffect } from "react";
-import { Bot, User, Send, Loader2, Sparkles, Shield, Terminal, Copy, Check } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Bot, User, Send, Loader2, Sparkles, Shield, Terminal, Copy, Check, RotateCcw } from "lucide-react";
 
 interface Message {
   id: string;
@@ -12,23 +12,35 @@ interface Message {
   engine?: string;
 }
 
+const WELCOME_MESSAGE: Message = {
+  id: "1",
+  role: "assistant",
+  content: "Hello! I am **SentinelX AI**, your Principal Security Operations & CSPM Copilot.\n\nAsk me to prioritize recorded vulnerabilities, correlate attacking IPs with **MITRE ATT&CK**, or draft production-ready **Terraform, Nginx, WAF, and CLI** remediations grounded in your live telemetry.",
+  engine: "SentinelX Security Copilot"
+};
+
 export default function AssistantPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Hello! I am **SentinelX AI**, your security operations and CSPM copilot.\n\nI can analyze your active findings, explain threat detections, and generate Terraform or AWS CLI remediation commands.",
-      engine: "SentinelX Security Copilot"
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
+  const [responseMode, setResponseMode] = useState<"deep" | "executive" | "concise">("deep");
   const [isLoading, setIsLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  const messagesRef = useRef<Message[]>([WELCOME_MESSAGE]);
   const messageIdRef = useRef(1);
+  const autoQueryHandledRef = useRef(false);
 
   const [keyStatus, setKeyStatus] = useState<{ configured: boolean } | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const handleCardMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+    e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+  };
 
   useEffect(() => {
     fetch(`${API_URL}/api/assistant/status`)
@@ -55,11 +67,17 @@ export default function AssistantPage() {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const sendPrompt = async (promptText: string) => {
-    if (!promptText.trim() || isLoading) return;
+  const sendPrompt = useCallback(async (promptText: string, modeOverride?: "deep" | "executive" | "concise") => {
+    const trimmed = promptText.trim();
+    if (!trimmed) return;
 
     messageIdRef.current += 1;
-    const userMsg: Message = { id: `msg-${messageIdRef.current}`, role: "user", content: promptText };
+    const userMsg: Message = { id: `msg-${messageIdRef.current}`, role: "user", content: trimmed };
+    const priorHistory = messagesRef.current
+      .filter(m => m.id !== "1")
+      .slice(-8)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
+
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
@@ -68,14 +86,18 @@ export default function AssistantPage() {
       const response = await fetch(`${API_URL}/api/assistant/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText, history: messages.filter(m => m.id !== "1").slice(-8).map(m => ({ role: m.role, content: m.content.slice(0, 4000) })) }),
+        body: JSON.stringify({
+          prompt: trimmed,
+          history: priorHistory,
+          response_mode: modeOverride ?? responseMode,
+        }),
       });
       if (!response.ok) throw new Error("Assistant request failed");
       const data = await response.json();
       if (typeof data.api_key_configured === "boolean") {
         setKeyStatus({ configured: data.api_key_configured });
       }
-      
+
       messageIdRef.current += 1;
       setMessages(prev => [...prev, {
         id: `msg-${messageIdRef.current}`,
@@ -94,18 +116,34 @@ export default function AssistantPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [responseMode]);
+
+  useEffect(() => {
+    if (autoQueryHandledRef.current || typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q && q.trim()) {
+      autoQueryHandledRef.current = true;
+      window.history.replaceState(null, "", window.location.pathname);
+      void sendPrompt(q.trim());
+    }
+  }, [sendPrompt]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    sendPrompt(input);
+    if (!isLoading) void sendPrompt(input);
+  };
+
+  const handleResetChat = () => {
+    if (isLoading) return;
+    setMessages([WELCOME_MESSAGE]);
   };
 
   const quickPrompts = [
-    { label: "Priority findings", query: "Which recorded audit findings should I investigate first and why?" },
-    { label: "Validate results", query: "How can I validate the recent candidate vulnerabilities safely?" },
-    { label: "Environment briefing", query: "Summarize the recent alerts, threats and audit findings." },
-    { label: "Remediation plan", query: "Create a remediation plan based on the recorded audit evidence." }
+    { label: "Remediate Top Findings", query: "Prioritize the top open Critical and High audit findings and generate exact configuration fixes (Nginx/CSP/HSTS/Terraform) with verification commands." },
+    { label: "Block Attacker IPs", query: "Correlate the top attacking source IPs from recent threat detections, map them to MITRE ATT&CK techniques, and generate firewall/WAF blocklist rules." },
+    { label: "Safe Verification Tests", query: "Provide safe, non-destructive verification commands to validate the recorded audit candidate vulnerabilities." },
+    { label: "Environment Briefing", query: "Provide an executive security briefing covering threats, alerts, cloud findings, and DevSecOps audit observations." },
+    { label: "CI/CD Pipeline Risks", query: "Review recent CI/CD pipeline scan statuses and recommend concrete DevSecOps gate improvements." },
   ];
 
   const renderInlineContent = (text: string, keyPrefix: string, isUser: boolean = false) => {
@@ -471,63 +509,113 @@ export default function AssistantPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-5xl mx-auto bg-surface border border-sentinel rounded-xl shadow-sm overflow-hidden">
+    <div
+      onMouseMove={handleCardMouseMove}
+      className="relative group flex flex-col h-[calc(100vh-8rem)] max-w-5xl mx-auto bg-surface border border-border hover:border-blue-400/60 rounded-2xl shadow-xs hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 overflow-hidden"
+    >
+      {/* Cursor Spotlight Glow */}
+      <div
+        className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"
+        style={{
+          background:
+            "radial-gradient(420px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.05), transparent 80%)",
+        }}
+      />
+      {/* Top Animated Accent Bar */}
+      <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center z-20" />
+
       {/* Header */}
-      <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-gray-50 via-white to-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-center">
+      <div className="relative z-10 px-5 py-4 border-b border-border bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:-rotate-6 transition-transform duration-300">
             <Bot className="w-5 h-5 text-primary" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-bold text-foreground">SentinelX AI Copilot</h1>
-              <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 whitespace-nowrap">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Connected
               </span>
             </div>
-            <p className="text-xs text-muted">
-              Intelligent telemetry analysis, threat triage & automated remediation drafting
+            <p className="text-xs text-muted mt-0.5">
+              Principal telemetry analysis, MITRE threat correlation & production remediation drafting
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Response Mode Selector */}
+          <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-medium">
+            {[
+              { id: "deep" as const, label: "Deep Technical" },
+              { id: "executive" as const, label: "Executive Brief" },
+              { id: "concise" as const, label: "Concise" },
+            ].map((modeOpt) => (
+              <button
+                key={modeOpt.id}
+                type="button"
+                onClick={() => setResponseMode(modeOpt.id)}
+                className={`px-2.5 py-1 rounded-md transition-all whitespace-nowrap ${
+                  responseMode === modeOpt.id
+                    ? "bg-white text-primary font-semibold shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {modeOpt.label}
+              </button>
+            ))}
+          </div>
+
           {keyStatus !== null && (
-            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border ${
-              keyStatus.configured 
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                : 'bg-amber-50 text-amber-800 border-amber-300'
+            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
+              keyStatus.configured
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-amber-50 text-amber-800 border-amber-300"
             }`}>
-              <Sparkles className={`w-3.5 h-3.5 ${keyStatus.configured ? 'text-emerald-600' : 'text-amber-600'}`} />
-              <span>{keyStatus.configured ? 'Gemini configured' : 'Local summary mode'}</span>
+              <Sparkles className={`w-3.5 h-3.5 ${keyStatus.configured ? "text-emerald-600" : "text-amber-600"}`} />
+              <span>{keyStatus.configured ? "AI Engine Active" : "Local Summary Mode"}</span>
             </div>
           )}
-          <div className="hidden sm:flex items-center gap-2 text-xs text-muted bg-surface border border-border rounded-md px-3 py-1.5">
-            <Shield className="w-3.5 h-3.5 text-primary" />
-            <span>Telemetry Context Active</span>
-          </div>
+
+          {messages.length > 1 && (
+            <button
+              type="button"
+              onClick={handleResetChat}
+              disabled={isLoading}
+              title="Reset conversation"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-border hover:bg-slate-50 rounded-lg px-2.5 py-1 transition-all"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">New Chat</span>
+            </button>
+          )}
         </div>
       </div>
 
-      <p className="px-5 py-2 text-xs text-muted border-b border-border">When Gemini is configured, recent findings, report excerpts, alerts, and chat history are sent to Google for analysis. Results and coverage are limited to the records supplied.</p>
+      <div className="relative z-10 px-5 py-2 text-[11px] text-muted border-b border-border bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
+        <span>Grounded in recorded audit findings, CSPM checks, threat streams, alerts, and CI/CD runs.</span>
+        <span className="hidden sm:inline-flex items-center gap-1 font-medium text-slate-600">
+          <Shield className="w-3 h-3 text-primary" /> Telemetry Context Active
+        </span>
+      </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-gray-50/50">
+      <div className="relative z-10 flex-1 overflow-y-auto p-5 space-y-5 bg-gray-50/50">
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex gap-3.5 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+          <div key={msg.id} className={`flex gap-3.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
             <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center shadow-xs ${
-              msg.role === 'user' ? 'bg-gray-800 text-white' : 'bg-primary text-white'
+              msg.role === "user" ? "bg-gray-800 text-white" : "bg-primary text-white"
             }`}>
-              {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+              {msg.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
-            
-            <div className={`max-w-[92%] md:max-w-[88%] rounded-2xl px-5 py-4 shadow-xs ${
-              msg.role === 'user' 
-                ? 'bg-primary text-white rounded-tr-none' 
-                : 'bg-white border border-gray-200/90 text-gray-800 rounded-tl-none'
+
+            <div className={`max-w-[92%] md:max-w-[88%] rounded-2xl px-5 py-4 shadow-xs transition-all duration-200 ${
+              msg.role === "user"
+                ? "bg-primary text-white rounded-tr-none"
+                : "bg-white border border-gray-200/90 hover:border-blue-300/70 text-gray-800 rounded-tl-none"
             }`}>
-              {renderMessageContent(msg.content, msg.role === 'user')}
+              {renderMessageContent(msg.content, msg.role === "user")}
               {msg.engine && (
                 <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2 text-[11px] text-muted">
                   <span className="flex items-center gap-1.5 font-medium text-slate-500">
@@ -556,7 +644,7 @@ export default function AssistantPage() {
             </div>
           </div>
         ))}
-        
+
         {isLoading && (
           <div className="flex gap-3.5 flex-row">
             <div className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center bg-primary text-white">
@@ -564,7 +652,9 @@ export default function AssistantPage() {
             </div>
             <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-none px-5 py-3 shadow-xs flex items-center gap-2.5">
               <Loader2 className="w-4 h-4 text-primary animate-spin" />
-              <span className="text-xs font-medium text-muted">Analyzing telemetry & generating recommendations...</span>
+              <span className="text-xs font-medium text-muted">
+                Correlating telemetry, attacker indicators & crafting {responseMode} remediation...
+              </span>
             </div>
           </div>
         )}
@@ -572,17 +662,17 @@ export default function AssistantPage() {
       </div>
 
       {/* Quick Prompts Bar */}
-      <div className="px-4 py-2 bg-white border-t border-border flex items-center gap-2 overflow-x-auto text-xs">
+      <div className="relative z-10 px-4 py-2.5 bg-white border-t border-border flex items-center gap-2 overflow-x-auto text-xs">
         <span className="text-muted shrink-0 flex items-center gap-1 font-medium">
-          <Sparkles className="w-3.5 h-3.5 text-primary" /> Quick actions:
+          <Sparkles className="w-3.5 h-3.5 text-primary" /> Playbooks:
         </span>
         {quickPrompts.map((qp, idx) => (
           <button
             key={idx}
             type="button"
-            onClick={() => sendPrompt(qp.query)}
+            onClick={() => void sendPrompt(qp.query)}
             disabled={isLoading}
-            className="shrink-0 px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors border border-gray-200"
+            className="shrink-0 px-3 py-1 rounded-full bg-slate-50 hover:bg-blue-50 hover:text-primary hover:border-blue-200 text-gray-700 transition-all border border-gray-200 font-medium"
           >
             {qp.label}
           </button>
@@ -590,20 +680,26 @@ export default function AssistantPage() {
       </div>
 
       {/* Input Form */}
-      <div className="p-4 bg-white border-t border-border">
-        <form onSubmit={handleSubmit} className="flex gap-2.5">
-          <input
-            type="text"
+      <div className="relative z-10 p-4 bg-white border-t border-border">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2.5">
+          <textarea
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about active threats, CSPM findings, or draft Terraform / CLI remediations..."
-            className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 text-foreground text-sm"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (input.trim() && !isLoading) void sendPrompt(input);
+              }
+            }}
+            placeholder="Ask about active threats, audit observations, or draft Nginx / Terraform / WAF remediations (Shift+Enter for newline)..."
+            className="flex-1 resize-none px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-foreground text-sm max-h-32 transition-all"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="bg-primary hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="bg-primary hover:bg-blue-700 hover:scale-[1.02] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 flex items-center gap-2 shrink-0 shadow-xs"
           >
             <Send className="w-4 h-4" />
             <span>Send</span>

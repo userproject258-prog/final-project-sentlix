@@ -1034,12 +1034,18 @@ class AssistantMessage(BaseModel):
 class AssistantQuery(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     history: list[AssistantMessage] = Field(default_factory=list, max_length=8)
+    response_mode: Literal["deep", "executive", "concise"] = "deep"
 
 from app.assistant.service import query_assistant, get_gemini_api_key, validate_gemini_api_key, set_runtime_api_key
 
 @app.post("/api/assistant/query")
 def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
-    result = query_assistant(query.prompt, session=session, history=[message.model_dump() for message in query.history])
+    result = query_assistant(
+        query.prompt,
+        session=session,
+        history=[message.model_dump() for message in query.history],
+        response_mode=query.response_mode,
+    )
     return result
 
 @app.get("/api/assistant/status")

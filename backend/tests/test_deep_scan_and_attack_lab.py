@@ -84,3 +84,70 @@ def test_attack_detection_benchmark_suite():
         assert len(session.exec(select(ThreatEvent)).all()) == 0
     engine.dispose()
 
+
+def test_assistant_intent_routing_and_enriched_context(monkeypatch):
+    from types import SimpleNamespace
+    import httpx
+    from app.assistant.service import _build_intent_directive, query_assistant
+    from app.models.core import AuditFinding
+
+    directive = _build_intent_directive("Fix Missing CSP with Nginx config and block attacking IPs", "deep")
+    assert "ACTION DIRECTIVE" in directive
+    assert "THREAT DIRECTIVE" in directive
+    assert "Deep Principal Engineering Analysis" in directive
+
+    exec_directive = _build_intent_directive("Give me a security briefing", "executive")
+    assert "Executive Security Briefing" in exec_directive
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured.update(kwargs["json"])
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"candidates": [{"content": {"parts": [{"text": "## Remediation\n```nginx\nadd_header Strict-Transport-Security \"max-age=31536000\";\n```"}]}}]},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(
+            AuditFinding(
+                id="f-1",
+                run_id="r-1",
+                target="https://app.example.test",
+                title="Missing HSTS header",
+                severity="HIGH",
+                evidence="Strict-Transport-Security absent",
+                recommendation="Enable HSTS",
+            )
+        )
+        session.add(
+            ThreatEvent(
+                id="THR-1",
+                type="Brute Force",
+                source="198.51.100.77",
+                destination="10.0.1.50:22",
+                confidence=0.98,
+                severity="HIGH",
+                status="Open",
+                simulated=True,
+            )
+        )
+        session.commit()
+
+        result = query_assistant(
+            "Fix Missing HSTS and check Brute Force IP",
+            session=session,
+            response_mode="executive",
+        )
+        assert "Strict-Transport-Security" in result["response"]
+        assert captured["generationConfig"]["maxOutputTokens"] == 4096
+        prompt_blob = captured["contents"][0]["parts"][0]["text"]
+        assert "audit_findings_total" in prompt_blob
+        assert "top_attacker_ips" in prompt_blob
+        assert "Executive Security Briefing" in prompt_blob
+    engine.dispose()
+
