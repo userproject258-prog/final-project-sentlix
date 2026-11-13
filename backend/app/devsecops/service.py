@@ -210,6 +210,7 @@ audit_run_state: Dict[str, Any] = {
     "active": PIPELINE[0][0],
     "stage_index": 0,
     "mode": "guided",
+    "scan_depth": "deep",
     "target": "",
     "provider": "gemini",
     "events": [],
@@ -417,12 +418,13 @@ def _save_audit_findings(run_id: str, findings: list[dict[str, str]]) -> None:
                                   source=item["target"], message=item["evidence"]))
         session.commit()
 
-def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str], run_id: str = "") -> str:
+def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str], run_id: str = "", scan_depth: str = "deep") -> str:
     """Executes a deep, comprehensive security scan for the selected pipeline stage using real live tools."""
     parsed = urlparse(target if "://" in target else f"https://{target}")
     host = parsed.netloc or parsed.path.split("/")[0]
     base_url = f"{parsed.scheme or 'https'}://{host}"
     login_url = f"{base_url}/login"
+    depth = scan_depth if scan_depth in ("standard", "deep", "aggressive") else "deep"
 
     try:
         if stage_index == 0:
@@ -485,10 +487,13 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
         elif stage_index == 2:
             # Stage 2: Endpoint Discovery & Metadata Extraction
             endpoint_output = ""
+            endpoint_findings: list[dict[str, str]] = []
             try:
-                endpoint_output = DeepEndpointDirectoryDiscoveryTool()._run(base_url=base_url)
+                endpoint_output, endpoint_findings = DeepEndpointDirectoryDiscoveryTool().inspect(base_url=base_url, depth=depth)
             except Exception as e:
                 endpoint_output = f"⚠️ Endpoint Discovery Warning: {str(e)}"
+            if run_id and endpoint_findings:
+                _save_audit_findings(run_id, endpoint_findings)
 
             metadata_output = ""
             try:
@@ -504,10 +509,13 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
         elif stage_index == 3:
             # Stage 3: DoS Resilience Testing
             dos_output = ""
+            dos_findings: list[dict[str, str]] = []
             try:
-                dos_output = RateLimitingDoSResilienceTesterTool()._run(url=base_url)
+                dos_output, dos_findings = RateLimitingDoSResilienceTesterTool().inspect(url=base_url, depth=depth)
             except Exception as e:
                 dos_output = f"⚠️ DoS & Rate Limit Testing Warning: {str(e)}"
+            if run_id and dos_findings:
+                _save_audit_findings(run_id, dos_findings)
 
             return clean_report_markdown(dos_output)
 
@@ -515,6 +523,8 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
             # Stage 4: Injection Testing
             sqli_output = ""
             try:
+                sqli_output, injection_findings = SqlInjectionVulnerabilityTesterTool().inspect(url=base_url, depth=depth)
+            except TypeError:
                 sqli_output, injection_findings = SqlInjectionVulnerabilityTesterTool().inspect(url=base_url)
             except Exception as e:
                 sqli_output = f"⚠️ Injection Testing Warning: {str(e)}"
@@ -527,13 +537,16 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
         elif stage_index == 5:
             # Stage 5: Authentication Testing
             auth_output = ""
+            auth_findings: list[dict[str, str]] = []
             try:
-                auth_output = AuthenticationSecurityTesterTool()._run(url=login_url)
+                auth_output, auth_findings = AuthenticationSecurityTesterTool().inspect(url=login_url)
             except Exception:
                 try:
-                    auth_output = AuthenticationSecurityTesterTool()._run(url=base_url)
+                    auth_output, auth_findings = AuthenticationSecurityTesterTool().inspect(url=base_url)
                 except Exception as e:
                     auth_output = f"⚠️ Authentication Security Testing Warning: {str(e)}"
+            if run_id and auth_findings:
+                _save_audit_findings(run_id, auth_findings)
 
             return clean_report_markdown(auth_output)
 
@@ -551,8 +564,44 @@ def _execute_native_stage(target: str, stage_index: int, prior_reports: list[str
 
 
         elif stage_index == 7:
-            sections = ["# Security Audit Evidence Summary", f"**Target:** `{target}`", "",
-                        "Review the stage evidence below. Scanner output can contain errors and requires manual validation; it does not establish compliance or confirm exploitation."]
+            db_findings: list[AuditFinding] = []
+            if run_id:
+                try:
+                    with Session(engine) as session:
+                        db_findings = list(session.exec(select(AuditFinding).where(AuditFinding.run_id == run_id)).all())
+                except Exception:
+                    db_findings = []
+
+            sev_tally = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            for item in db_findings:
+                sev_key = item.severity.upper()
+                if sev_key in sev_tally:
+                    sev_tally[sev_key] += 1
+
+            penalty = sev_tally["CRITICAL"] * 25 + sev_tally["HIGH"] * 12 + sev_tally["MEDIUM"] * 5 + sev_tally["LOW"] * 2
+            computed_score = max(10, 100 - penalty)
+            grade = (
+                "A" if computed_score >= 90 else
+                "B" if computed_score >= 80 else
+                "C" if computed_score >= 65 else
+                "D" if computed_score >= 50 else "F"
+            )
+
+            sections = [
+                "# Security Audit Evidence Summary",
+                f"**Target:** `{target}` | **Scan Depth:** `{depth.upper()}` | **Posture Grade:** `{grade}` (`{computed_score}/100`)",
+                "",
+                "Review the stage evidence below. Scanner output can contain errors and requires manual validation; it does not establish compliance or confirm exploitation.",
+                "",
+                "## Verified Observation Tally",
+                "",
+                "| Severity | Verified Database Observations | Scoring Weight |",
+                "|---|---|---|",
+                f"| Critical | `{sev_tally['CRITICAL']}` | 25 pts / finding |",
+                f"| High | `{sev_tally['HIGH']}` | 12 pts / finding |",
+                f"| Medium | `{sev_tally['MEDIUM']}` | 5 pts / finding |",
+                f"| Low | `{sev_tally['LOW']}` | 2 pts / finding |",
+            ]
             for index, report in enumerate(prior_reports):
                 sections.append(f"## {PIPELINE[index][0]}\n\n{report}")
             return "\n\n".join(sections)
@@ -588,6 +637,7 @@ def _execute_full_audit(state: dict, target: str, provider: str) -> None:
     with state["lock"]:
         state["status"] = "running"
         state["completed"] = 0
+        scan_depth = state.get("scan_depth", "deep")
     
     prior_reports = []
     for stage_index in range(len(PIPELINE)):
@@ -604,8 +654,10 @@ def _execute_full_audit(state: dict, target: str, provider: str) -> None:
                 "status": "running"
             })
 
+        t_stage = time.time()
         try:
-            stage_report = _execute_native_stage(target, stage_index, prior_reports, state["run_id"])
+            stage_report = _execute_native_stage(target, stage_index, prior_reports, state["run_id"], scan_depth)
+            elapsed_ms = int((time.time() - t_stage) * 1000)
             prior_reports.append(stage_report)
             with state["lock"]:
                 state["report"] = stage_report
@@ -613,7 +665,7 @@ def _execute_full_audit(state: dict, target: str, provider: str) -> None:
                 state["completed"] = stage_index + 1
                 state["events"].append({
                     "time": datetime.now().strftime("%H:%M:%S"),
-                    "label": PIPELINE[stage_index][0],
+                    "label": f"{PIPELINE[stage_index][0]} ({elapsed_ms}ms)",
                     "status": "complete"
                 })
             _save_audit_report(state)
@@ -636,6 +688,7 @@ def _execute_guided_stage(state: dict, stage_index: int) -> None:
         state["status"] = "running"
         state["active"] = PIPELINE[stage_index][0]
         state["completed"] = stage_index
+        scan_depth = state.get("scan_depth", "deep")
         state["events"].append({
             "time": datetime.now().strftime("%H:%M:%S"),
             "label": f"Starting {PIPELINE[stage_index][0]}",
@@ -645,8 +698,10 @@ def _execute_guided_stage(state: dict, stage_index: int) -> None:
     prior_reports = list(state["reports"].values())
     target = state["target"]
 
+    t_stage = time.time()
     try:
-        report = _execute_native_stage(target, stage_index, prior_reports, state["run_id"])
+        report = _execute_native_stage(target, stage_index, prior_reports, state["run_id"], scan_depth)
+        elapsed_ms = int((time.time() - t_stage) * 1000)
         with state["lock"]:
             state["report"] = report
             state["reports"][PIPELINE[stage_index][0]] = report
@@ -654,7 +709,7 @@ def _execute_guided_stage(state: dict, stage_index: int) -> None:
             state["active"] = PIPELINE[stage_index][0]
             state["events"].append({
                 "time": datetime.now().strftime("%H:%M:%S"),
-                "label": PIPELINE[stage_index][0],
+                "label": f"{PIPELINE[stage_index][0]} ({elapsed_ms}ms)",
                 "status": "complete"
             })
         _save_audit_report(state)
@@ -685,7 +740,8 @@ def _execute_remaining_stages(state: dict) -> None:
         state["status"] = "complete"
         state["active"] = "Assessment complete"
 
-def start_audit_run(target: str, mode: str = "guided", provider: str = "gemini") -> Dict[str, Any]:
+def start_audit_run(target: str, mode: str = "guided", provider: str = "gemini", scan_depth: str = "deep") -> Dict[str, Any]:
+    depth = scan_depth if scan_depth in ("standard", "deep", "aggressive") else "deep"
     with audit_run_state["lock"]:
         if audit_run_state["status"] in ("queued", "running"):
             raise ValueError("An audit stage is already running.")
@@ -695,6 +751,7 @@ def start_audit_run(target: str, mode: str = "guided", provider: str = "gemini")
         audit_run_state["active"] = PIPELINE[0][0]
         audit_run_state["stage_index"] = 0
         audit_run_state["mode"] = mode
+        audit_run_state["scan_depth"] = depth
         audit_run_state["target"] = target
         audit_run_state["provider"] = provider
         audit_run_state["events"] = []
@@ -759,6 +816,7 @@ def get_audit_status() -> Dict[str, Any]:
             "active": audit_run_state["active"],
             "stage_index": audit_run_state["stage_index"],
             "mode": audit_run_state["mode"],
+            "scan_depth": audit_run_state.get("scan_depth", "deep"),
             "target": audit_run_state["target"],
             "provider": audit_run_state["provider"],
             "events": list(audit_run_state["events"]),

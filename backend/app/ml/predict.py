@@ -1,4 +1,5 @@
 import os
+import time
 import joblib
 import pandas as pd
 import numpy as np
@@ -43,14 +44,22 @@ def analyze_event(event_data: dict) -> dict:
     df = pd.DataFrame([row])
     
     # Predict
+    t0 = time.perf_counter()
     pred_idx = clf.predict(df)[0]
     probabilities = clf.predict_proba(df)[0]
-    
+    inference_ms = round((time.perf_counter() - t0) * 1000, 3)
+
     confidence = float(np.max(probabilities))
     label = le.inverse_transform([pred_idx])[0]
-    
+    probs_map = {
+        str(cls_name): round(float(prob), 4)
+        for cls_name, prob in zip(le.classes_, probabilities)
+    }
+
     return {
         "prediction": label,
         "confidence": confidence,
-        "severity": map_severity(label)
+        "severity": map_severity(label),
+        "probabilities": probs_map,
+        "inference_ms": inference_ms,
     }

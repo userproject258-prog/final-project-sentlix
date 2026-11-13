@@ -47,6 +47,7 @@ interface AuditState {
   active: string;
   stage_index: number;
   mode: "guided" | "all";
+  scan_depth?: "standard" | "deep" | "aggressive";
   target: string;
   provider: string;
   events: { time: string; label: string; status: string }[];
@@ -72,6 +73,7 @@ export default function DevSecOpsPage() {
   const [target, setTarget] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [mode, setMode] = useState<"guided" | "all">("guided");
+  const [scanDepth, setScanDepth] = useState<"standard" | "deep" | "aggressive">("deep");
   const [provider, setProvider] = useState("gemini");
   const [loading, setLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
@@ -162,6 +164,7 @@ export default function DevSecOpsPage() {
           authorized,
           mode,
           provider,
+          scan_depth: scanDepth,
         }),
       });
       const data = await res.json();
@@ -400,7 +403,39 @@ export default function DevSecOpsPage() {
                   <input type="text" id="audit-target" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="https://app.example.com" className="w-full rounded-lg border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50 disabled:text-slate-500 transition-all" disabled={isRunning} required aria-describedby="audit-target-hint" />
                 </div>
                 <p id="audit-target-hint" className="mt-1.5 text-[11px] text-slate-500">Enter a domain, IP address, or full URL.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-slate-400">Deep Scan Capabilities:</span>
+                  {["Soft-404 Filter", "JS Secret Mining", "LFI & Time-Blind SQLi", "Sitemap Crawl", "TLS/X.509 Check"].map((cap) => (
+                    <span key={cap} className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-[10px] font-medium text-slate-600">
+                      {cap}
+                    </span>
+                  ))}
+                </div>
               </div>
+
+              <fieldset disabled={isRunning}>
+                <legend className="mb-2 block text-xs font-semibold text-slate-700">Scanning depth profile</legend>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  {[
+                    { value: "standard" as const, label: "Standard Audit", badge: "Fast", description: "Core headers, TLS, 42 endpoints & 8 fuzz inputs." },
+                    { value: "deep" as const, label: "Deep Reconnaissance", badge: "Recommended", description: "95+ cloud/config paths, JS secrets, sitemap, LFI & blind SQLi." },
+                    { value: "aggressive" as const, label: "Aggressive Suite", badge: "Exhaustive", description: "Max concurrency, extended payloads & full auth/DoS probes." },
+                  ].map((opt) => (
+                    <label key={opt.value} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-all duration-200 ${scanDepth === opt.value ? "border-cyan-500 bg-cyan-50/60 shadow-xs ring-1 ring-cyan-500/30" : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50/80"} ${isRunning ? "cursor-not-allowed opacity-60" : ""}`}>
+                      <input type="radio" name="scanDepth" value={opt.value} checked={scanDepth === opt.value} onChange={() => setScanDepth(opt.value)} className="mt-0.5 h-4 w-4 accent-cyan-600" />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                          {opt.label}
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${opt.value === "deep" ? "bg-cyan-100 text-cyan-800" : opt.value === "aggressive" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"}`}>
+                            {opt.badge}
+                          </span>
+                        </span>
+                        <span className="mt-1 block text-[11px] leading-snug text-slate-500">{opt.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               <div>
                 <label htmlFor="audit-provider" className="mb-2 block text-xs font-semibold text-slate-700">AI provider</label>
@@ -471,6 +506,7 @@ export default function DevSecOpsPage() {
 
               <dl className="divide-y divide-slate-100">
                 <div className="flex items-start justify-between gap-4 py-3 first:pt-0"><dt className="text-xs text-slate-500">Status</dt><dd className="text-right text-xs font-semibold capitalize text-slate-800">{audit?.status || (connectionError ? "Unavailable" : "Connecting")}</dd></div>
+                <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs text-slate-500">Scan depth</dt><dd className="text-right text-xs font-semibold uppercase text-cyan-700">{audit?.scan_depth || scanDepth}</dd></div>
                 <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs text-slate-500">Critical / high mentions</dt><dd className="text-right text-xs font-semibold tabular-nums text-slate-800">{audit ? (audit.counts?.Critical || 0) + (audit.counts?.High || 0) : "—"}</dd></div>
                 <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs text-slate-500">Last started</dt><dd className="text-right text-xs font-semibold text-slate-800">{audit ? audit.started || "No assessment yet" : "—"}</dd></div>
                 {audit?.target && <div className="flex items-start justify-between gap-4 py-3"><dt className="shrink-0 text-xs text-slate-500">Target</dt><dd className="break-all text-right text-xs font-medium text-slate-800">{audit.target}</dd></div>}

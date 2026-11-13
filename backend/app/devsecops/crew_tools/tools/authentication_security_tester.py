@@ -356,8 +356,8 @@ class AuthenticationSecurityTesterTool(BaseTool):
         return "\n".join(lines)
 
     # ── Entry Point ──
-    def _run(self, url: str) -> str:
-        """Execute comprehensive authentication security audit."""
+    def inspect(self, url: str) -> Tuple[str, List[Dict[str, str]]]:
+        """Execute comprehensive authentication security audit and return report + findings."""
         target_url = self._normalize_url(url)
 
         session = requests.Session()
@@ -372,8 +372,9 @@ class AuthenticationSecurityTesterTool(BaseTool):
         form_info = self._audit_form_architecture(login_url, login_html)
 
         if not form_info["has_password"]:
-            return self._build_markdown_report(target_url, login_url, form_info, [], {},
-                                               {"attempts": []}, self._discover_sso_mfa(login_html), login_resp)
+            report = self._build_markdown_report(target_url, login_url, form_info, [], {},
+                                                 {"attempts": []}, self._discover_sso_mfa(login_html), login_resp)
+            return report, []
 
         # 3. Default credentials audit
         cred_results = self._audit_default_credentials(session, login_url)
@@ -388,6 +389,37 @@ class AuthenticationSecurityTesterTool(BaseTool):
         sso_results = self._discover_sso_mfa(login_html)
 
         # 7. Render markdown report
-        return self._build_markdown_report(
+        report = self._build_markdown_report(
             target_url, login_url, form_info, cred_results, enum_results, bf_results, sso_results, login_resp
         )
+
+        findings: List[Dict[str, str]] = []
+        if not form_info["has_https"] or not form_info["is_action_https"]:
+            findings.append({
+                "target": login_url,
+                "title": "Authentication form transmitted over unencrypted HTTP",
+                "severity": "HIGH",
+                "evidence": f"Login URL `{login_url}` or form action `{form_info['form_action']}` does not enforce HTTPS.",
+                "recommendation": "Enforce TLS/HTTPS across all login endpoints and form actions with HSTS.",
+            })
+        if not form_info["has_csrf"]:
+            findings.append({
+                "target": login_url,
+                "title": "No CSRF token markup observed on login form",
+                "severity": "MEDIUM",
+                "evidence": f"Password form at `{login_url}` lacked standard hidden CSRF token fields.",
+                "recommendation": "Implement anti-CSRF tokens or SameSite=Strict cookie validation for login requests.",
+            })
+        if bf_results.get("attempts") and not bf_results["lockout_triggered"] and not bf_results["captcha_triggered"]:
+            findings.append({
+                "target": login_url,
+                "title": "No progressive brute-force lockout observed during repeated login probes",
+                "severity": "MEDIUM",
+                "evidence": f"6 rapid login probes against `{login_url}` completed without HTTP 429, lockout, or CAPTCHA challenge.",
+                "recommendation": "Enforce progressive backoff, account lockout thresholds, and adaptive bot/CAPTCHA protection.",
+            })
+
+        return report, findings
+
+    def _run(self, url: str) -> str:
+        return self.inspect(url)[0]

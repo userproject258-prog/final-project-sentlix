@@ -1,6 +1,6 @@
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
-from typing import Type, List, Dict, Any, Optional
+from typing import Type, List, Dict, Any, Optional, Tuple
 import requests
 import time
 from urllib.parse import urlparse
@@ -505,36 +505,58 @@ class RateLimitingDoSResilienceTesterTool(BaseTool):
         return "\n".join(sections)
 
     # ── Entry Point ──
-    def _run(self, url: str) -> str:
-        """Execute comprehensive DoS resilience and rate limiting audit."""
+    def inspect(self, url: str, depth: str = "deep") -> Tuple[str, List[Dict[str, str]]]:
+        """Execute DoS resilience and rate limiting audit and return report + structured findings."""
         target_url = self._normalize_url(url)
 
-        # Suppress insecure request warnings for penetration testing
         try:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         except Exception:
             pass
 
-        # 1. Burst benchmark
         burst = self._execute_burst_benchmark(target_url)
-
-        # 2. Latency metrics
         latency = self._compute_latency_metrics(burst["timings_ms"])
-
-        # 3. Payload stress tests
         payloads = self._execute_payload_stress(target_url)
-
-        # 4. HTTP verb auditing
         methods = self._execute_method_audit(target_url)
-
-        # 5. Injection & Host audits
         injections = self._execute_injection_audit(target_url)
-
-        # 6. Edge CDN, compression & caching
         edge = self._execute_edge_audit(target_url)
 
-        # 7. Generate markdown
-        return self._build_markdown_report(
+        report = self._build_markdown_report(
             target_url, burst, latency, payloads, methods, injections, edge
         )
+
+        findings: List[Dict[str, str]] = []
+        valid_responses = len(burst["timings_ms"])
+        if valid_responses > 0:
+            if not burst["rate_limited"] and not burst["rate_headers"]:
+                findings.append({
+                    "target": target_url,
+                    "title": "No Layer-7 rate limiting observed under burst load",
+                    "severity": "MEDIUM",
+                    "evidence": f"{valid_responses}/20 sequential burst requests succeeded without HTTP 429 or RateLimit headers.",
+                    "recommendation": "Configure edge WAF or reverse proxy rate limiting (e.g., Nginx limit_req or API gateway quotas).",
+                })
+            for m in methods:
+                if m["risk"] == "High":
+                    findings.append({
+                        "target": target_url,
+                        "title": f"Dangerous HTTP method {m['method']} enabled",
+                        "severity": "HIGH",
+                        "evidence": f"HTTP {m['method']} returned {m['status']} instead of 405/403.",
+                        "recommendation": f"Disable HTTP {m['method']} on the web server and reverse proxy.",
+                    })
+            for inj in injections:
+                if inj["risk"] == "Medium":
+                    findings.append({
+                        "target": target_url,
+                        "title": "Arbitrary Host header accepted (cache poisoning risk)",
+                        "severity": "MEDIUM",
+                        "evidence": f"{inj['vector']} returned {inj['status']}.",
+                        "recommendation": "Enforce strict virtual host allowlisting and reject unrecognized Host headers.",
+                    })
+
+        return report, findings
+
+    def _run(self, url: str) -> str:
+        return self.inspect(url)[0]

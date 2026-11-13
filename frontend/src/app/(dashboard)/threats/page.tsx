@@ -22,7 +22,34 @@ import {
   Layers,
   Loader2,
   Target,
+  Cpu,
+  Activity,
 } from "lucide-react";
+
+interface ThreatModelTelemetry {
+  model_name: string;
+  version: string;
+  status: string;
+  algorithm: string;
+  dataset: string;
+  metrics: {
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1_score: number;
+    latency_ms: number;
+  };
+  features: {
+    name: string;
+    importance: number;
+    description: string;
+  }[];
+  confusion_matrix: {
+    actual: string;
+    predicted_normal: number;
+    predicted_attack: number;
+  }[];
+}
 
 interface ThreatData {
   id: string;
@@ -53,6 +80,7 @@ export default function ThreatDetectionPage() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [findings, setFindings] = useState<AuditFinding[]>([]);
+  const [modelTelemetry, setModelTelemetry] = useState<ThreatModelTelemetry | null>(null);
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
   const [updatingThreatId, setUpdatingThreatId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -115,9 +143,10 @@ export default function ThreatDetectionPage() {
 
     const loadInitialData = async () => {
       try {
-        const [threatsRes, findingsRes] = await Promise.all([
+        const [threatsRes, findingsRes, modelRes] = await Promise.all([
           fetch(`${API_URL}/api/threats`),
           fetch(`${API_URL}/api/devsecops/findings`),
+          fetch(`${API_URL}/api/threats/model`),
         ]);
 
         if (threatsRes.ok && !isCancelled) {
@@ -130,6 +159,10 @@ export default function ThreatDetectionPage() {
           if (Array.isArray(findingsJson.findings)) {
             setFindings(findingsJson.findings);
           }
+        }
+
+        if (modelRes.ok && !isCancelled) {
+          setModelTelemetry(await modelRes.json());
         }
       } catch (err) {
         console.error("Initial data load error:", err);
@@ -606,6 +639,121 @@ export default function ThreatDetectionPage() {
           </div>
         </div>
       </section>
+
+      {/* RF-IDS MODEL PERFORMANCE & FEATURE ATTRIBUTION */}
+      {modelTelemetry && (
+        <section
+          onMouseMove={handleCardMouseMove}
+          className="relative overflow-hidden group bg-surface border border-border hover:border-indigo-400/70 rounded-2xl p-6 shadow-xs hover:shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out space-y-5"
+        >
+          {/* Cursor Spotlight Glow */}
+          <div
+            className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            style={{
+              background:
+                "radial-gradient(350px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(79, 70, 229, 0.07), transparent 80%)",
+            }}
+          />
+          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+
+          <div className="relative z-10 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-50 border border-indigo-200/80 text-indigo-600 rounded-xl group-hover:scale-105 group-hover:-rotate-6 transition-transform duration-300">
+                  <Cpu className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                    {modelTelemetry.model_name}
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      v{modelTelemetry.version} · {modelTelemetry.status}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-muted mt-0.5">{modelTelemetry.dataset}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                  Accuracy: <strong className="text-emerald-700">{modelTelemetry.metrics.accuracy}%</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                  Precision: <strong className="text-blue-700">{modelTelemetry.metrics.precision}%</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                  F1: <strong className="text-indigo-700">{modelTelemetry.metrics.f1_score}%</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                  Latency: <strong className="text-slate-900">{modelTelemetry.metrics.latency_ms}ms</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Feature Importance */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-indigo-600" />
+                  Feature Attribution Weights
+                </h3>
+                <div className="space-y-2.5">
+                  {modelTelemetry.features.map((feat) => (
+                    <div key={feat.name} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-semibold text-foreground">{feat.name}</span>
+                        <span className="font-mono font-bold text-indigo-700">{feat.importance}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 transition-all duration-500"
+                          style={{ width: `${Math.min(100, feat.importance * 2.2)}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted">{feat.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Confusion Matrix Validation Table */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
+                  Holdout Evaluation Matrix (2,000 Flows)
+                </h3>
+                <div className="overflow-x-auto border border-border rounded-xl bg-white">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-[11px] uppercase text-muted border-b border-border">
+                      <tr>
+                        <th className="px-3.5 py-2.5 font-semibold">Actual Class</th>
+                        <th className="px-3.5 py-2.5 font-semibold">Predicted Benign</th>
+                        <th className="px-3.5 py-2.5 font-semibold">Predicted Attack</th>
+                        <th className="px-3.5 py-2.5 font-semibold text-right">Detection Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {modelTelemetry.confusion_matrix.map((row) => {
+                        const total = row.predicted_normal + row.predicted_attack;
+                        const rate =
+                          row.actual === "Normal"
+                            ? ((row.predicted_normal / total) * 100).toFixed(1)
+                            : ((row.predicted_attack / total) * 100).toFixed(1);
+                        return (
+                          <tr key={row.actual} className="hover:bg-slate-50/70">
+                            <td className="px-3.5 py-2.5 font-semibold text-foreground">{row.actual}</td>
+                            <td className="px-3.5 py-2.5 font-mono text-slate-700">{row.predicted_normal}</td>
+                            <td className="px-3.5 py-2.5 font-mono text-rose-700 font-semibold">{row.predicted_attack}</td>
+                            <td className="px-3.5 py-2.5 text-right font-mono font-bold text-emerald-700">{rate}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* THREAT DATA TABLE (INTERACTIVE INCIDENT COMMAND CENTER) */}
       <div
