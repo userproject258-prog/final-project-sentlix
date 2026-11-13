@@ -232,3 +232,63 @@ def test_assistant_multi_key_failover_and_local_fallback(monkeypatch):
     engine.dispose()
 
 
+def test_settings_provider_policies_and_sync_all(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from sqlalchemy.pool import StaticPool
+    from sqlmodel import SQLModel, create_engine, Session
+    import app.main as main
+
+    monkeypatch.setattr(
+        main,
+        "get_active_provider_status",
+        lambda: {
+            "configured": True,
+            "key_present": True,
+            "key_length": 56,
+            "provider": "Groq",
+            "available_providers": ["Groq", "Google Gemini"],
+        },
+    )
+    monkeypatch.setattr(
+        main,
+        "get_candidate_api_keys",
+        lambda: ["gsk_test_123456789012345678901234567890"],
+    )
+    monkeypatch.setattr(main, "_POLICIES_STATE", dict(main._POLICIES_STATE))
+    monkeypatch.setattr(main, "_INTEGRATIONS_STATE", [dict(item) for item in main._INTEGRATIONS_STATE])
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+    fake_request = SimpleNamespace(state=SimpleNamespace(user_id=None))
+
+    with Session(engine) as session:
+        payload = main.get_settings(fake_request, session)
+        assert payload["ai_config"]["configured"] is True
+        assert payload["ai_config"]["provider"] == "Groq"
+        assert payload["ai_config"]["engine"].startswith("Groq ")
+        assert payload["ai_config"]["available_providers"] == ["Groq", "Google Gemini"]
+        assert payload["ml_engine"]["name"] == "RF-IDS"
+
+    updated = asyncio.run(
+        main.update_policies(
+            main.PoliciesUpdateRequest(
+                emailCritical=False,
+                slackWebhook=True,
+                autoAlertIds=False,
+                weeklyDigest=True,
+                strictCspmDrift=True,
+            )
+        )
+    )
+    assert updated["policies"]["emailCritical"] is False
+    assert updated["policies"]["weeklyDigest"] is True
+
+    sync_res = asyncio.run(main.sync_all_integrations())
+    connected_items = [item for item in sync_res["integrations"] if item["status"] == "Connected"]
+    assert sync_res["synced"] == len(connected_items)
+    assert all(item["last_sync"] == "Just now" for item in connected_items)
+    engine.dispose()
+
+
+

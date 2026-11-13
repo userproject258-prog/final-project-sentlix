@@ -8,7 +8,11 @@ import { API_URL, apiFetch } from "@/lib/api";
 
 function subscribeUser(callback: () => void) {
   window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
+  window.addEventListener("sentinelx-user-updated", callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("sentinelx-user-updated", callback);
+  };
 }
 
 function getStoredUserName() {

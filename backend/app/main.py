@@ -1039,11 +1039,21 @@ class AssistantQuery(BaseModel):
 from app.assistant.service import (
     query_assistant,
     get_gemini_api_key,
+    get_candidate_api_keys,
     validate_gemini_api_key,
     set_runtime_api_key,
     get_active_provider_status,
     detect_key_provider,
 )
+
+def _provider_engine_label(provider: str) -> str:
+    engine_map = {
+        "Groq": "Groq openai/gpt-oss-120b",
+        "xAI Grok": "xAI grok-3",
+        "OpenAI": "OpenAI gpt-4o-mini",
+        "Google Gemini": f"Google {os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')}",
+    }
+    return engine_map.get(provider, "Google gemini-2.5-flash")
 
 @app.post("/api/assistant/query")
 def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
@@ -1064,6 +1074,7 @@ def assistant_status():
         "key_length": status["key_length"],
         "provider": status["provider"],
         "available_providers": status["available_providers"],
+        "engine": _provider_engine_label(status["provider"]) if status["configured"] else "Local recorded-data summary",
     }
 
 
@@ -1111,6 +1122,14 @@ _INTEGRATIONS_STATE = [
     {"id": "azure", "name": "Microsoft Azure Defender", "category": "Cloud CSPM", "account": "Not configured", "region": "westeurope", "status": "Disconnected", "last_sync": "N/A"},
 ]
 
+_POLICIES_STATE = {
+    "emailCritical": True,
+    "slackWebhook": True,
+    "autoAlertIds": True,
+    "weeklyDigest": False,
+    "strictCspmDrift": True,
+}
+
 class AIKeyUpdateRequest(BaseModel):
     api_key: str
 
@@ -1118,24 +1137,49 @@ class IntegrationToggleRequest(BaseModel):
     name: str
     action: Literal["toggle", "sync"] = "toggle"
 
+class PoliciesUpdateRequest(BaseModel):
+    emailCritical: bool
+    slackWebhook: bool
+    autoAlertIds: bool
+    weeklyDigest: bool
+    strictCspmDrift: bool
+
 class ProfileUpdateRequest(BaseModel):
     name: str
 
+def _mask_key(key: str) -> str:
+    return f"{key[:4]}••••••••••••{key[-4:]}" if len(key) > 10 else ("Configured" if key else "Not Set")
+
 @app.get("/api/settings")
 def get_settings(request: Request, session: Session = Depends(get_session)):
-    k = get_gemini_api_key()
-    is_valid = validate_gemini_api_key(k)
-    masked = f"{k[:4]}••••••••••••{k[-4:]}" if len(k) > 10 else ("Configured" if k else "Not Set")
-    user = session.get(User, getattr(request.state, "user_id", None))
+    status = get_active_provider_status()
+    candidates = get_candidate_api_keys()
+    active_key = next(
+        (c for c in candidates if detect_key_provider(c) == status["provider"]),
+        candidates[0] if candidates else "",
+    )
+    is_valid = status["configured"]
+    provider = status["provider"]
+    user_id = getattr(request.state, "user_id", None)
+    user = session.get(User, user_id) if user_id is not None else None
     active_sessions = session.exec(select(AuthSession).where(AuthSession.user_id == user.id)).all() if user else []
     return {
         "integrations": _INTEGRATIONS_STATE,
         "ai_config": {
             "configured": is_valid,
-            "key_present": bool(k),
-            "masked_key": masked,
-            "engine": "Google gemini-2.5-flash" if is_valid else "Local recorded-data summary",
+            "key_present": status["key_present"],
+            "masked_key": _mask_key(active_key),
+            "provider": provider,
+            "available_providers": status["available_providers"],
+            "engine": _provider_engine_label(provider) if is_valid else "Local recorded-data summary",
             "model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        },
+        "policies": _POLICIES_STATE,
+        "ml_engine": {
+            "name": "RF-IDS",
+            "version": "1.0.4",
+            "accuracy": 94.2,
+            "classifier": "Random Forest Classifier Active",
         },
         "user": {
             "id": user.id if user else 1,
@@ -1152,20 +1196,24 @@ def update_ai_key(req: AIKeyUpdateRequest):
     clean_key = set_runtime_api_key(req.api_key)
     is_valid = validate_gemini_api_key(clean_key)
     provider = detect_key_provider(clean_key)
-    engine_map = {
-        "Groq": "Groq openai/gpt-oss-120b",
-        "xAI Grok": "xAI grok-3",
-        "OpenAI": "OpenAI gpt-4o-mini",
-        "Google Gemini": "Google gemini-2.5-flash",
-    }
-    masked = f"{clean_key[:4]}••••••••••••{clean_key[-4:]}" if len(clean_key) > 10 else ("Configured" if clean_key else "Not Set")
+    status = get_active_provider_status()
     return {
         "status": "success",
         "configured": is_valid,
         "provider": provider if is_valid else "Local Summary Mode",
-        "masked_key": masked,
-        "engine": engine_map.get(provider, "Google gemini-2.5-flash") if is_valid else "Local recorded-data summary",
+        "available_providers": status["available_providers"],
+        "masked_key": _mask_key(clean_key),
+        "engine": _provider_engine_label(provider) if is_valid else "Local recorded-data summary",
     }
+
+@app.post("/api/settings/integrations/sync-all")
+async def sync_all_integrations():
+    synced = 0
+    for item in _INTEGRATIONS_STATE:
+        if item["status"] == "Connected":
+            item["last_sync"] = "Just now"
+            synced += 1
+    return {"status": "success", "synced": synced, "integrations": _INTEGRATIONS_STATE}
 
 @app.post("/api/settings/integrations")
 async def update_integration(req: IntegrationToggleRequest):
@@ -1184,9 +1232,15 @@ async def update_integration(req: IntegrationToggleRequest):
             return {"status": "success", "integration": item, "integrations": _INTEGRATIONS_STATE}
     raise HTTPException(status_code=404, detail="Integration not found")
 
+@app.post("/api/settings/policies")
+async def update_policies(req: PoliciesUpdateRequest):
+    _POLICIES_STATE.update(req.model_dump())
+    return {"status": "success", "policies": _POLICIES_STATE}
+
 @app.put("/api/auth/profile")
 async def update_profile(req: ProfileUpdateRequest, request: Request, session: Session = Depends(get_session)):
-    user = session.get(User, getattr(request.state, "user_id", None))
+    user_id = getattr(request.state, "user_id", None)
+    user = session.get(User, user_id) if user_id is not None else None
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     clean_name = req.name.strip()

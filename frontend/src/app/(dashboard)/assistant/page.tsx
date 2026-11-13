@@ -125,12 +125,18 @@ export default function AssistantPage() {
   }, [responseMode]);
 
   useEffect(() => {
-    if (autoQueryHandledRef.current || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
+    const savedMode = localStorage.getItem("sentinelx_assistant_mode");
+    const validSaved = savedMode === "deep" || savedMode === "executive" || savedMode === "concise" ? savedMode : undefined;
+    if (validSaved) {
+      void Promise.resolve().then(() => setResponseMode(validSaved));
+    }
+    if (autoQueryHandledRef.current) return;
     const q = new URLSearchParams(window.location.search).get("q");
     if (q && q.trim()) {
       autoQueryHandledRef.current = true;
       window.history.replaceState(null, "", window.location.pathname);
-      void sendPrompt(q.trim());
+      void sendPrompt(q.trim(), validSaved);
     }
   }, [sendPrompt]);
 
