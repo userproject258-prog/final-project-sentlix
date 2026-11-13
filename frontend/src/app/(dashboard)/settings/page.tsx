@@ -1500,41 +1500,50 @@ export default function SettingsPage() {
   );
 
   const architectureReferenceCard = (
-    <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-xs space-y-3 border border-slate-800">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wider font-semibold text-blue-300 flex items-center gap-1.5">
-          <Shield className="w-3.5 h-3.5" /> Security Telemetry Architecture
-        </span>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-200 border border-blue-400/20">
+    <SpotlightCard accent="blue" className="w-full">
+      <div className="relative z-10 px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-slate-50 via-white to-blue-50/30 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+            <Shield className="w-4 h-4 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Security Telemetry Architecture</h2>
+            <p className="text-[11px] text-muted">Unified verification pipeline</p>
+          </div>
+        </div>
+        <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
           Zero-Hallucination
         </span>
       </div>
-      <p className="text-xs text-slate-300 leading-relaxed">
-        SentinelX correlates live Random Forest IDS classifications, 8-stage DevSecOps audits, and Cloud CSPM drift checks into a verified evidence context for your AI Copilot.
-      </p>
-      <div className="pt-1 flex flex-wrap items-center gap-3 text-xs">
-        <Link
-          href="/assistant"
-          className="inline-flex items-center gap-1 font-semibold text-blue-300 hover:text-white transition-colors"
-        >
-          Open AI Copilot <ExternalLink className="w-3 h-3" />
-        </Link>
-        <span className="text-slate-600">•</span>
-        <Link
-          href="/devsecops"
-          className="inline-flex items-center gap-1 font-semibold text-emerald-300 hover:text-white transition-colors"
-        >
-          Launch Audit <ExternalLink className="w-3 h-3" />
-        </Link>
-        <span className="text-slate-600">•</span>
-        <Link
-          href="/monitoring"
-          className="inline-flex items-center gap-1 font-semibold text-indigo-300 hover:text-white transition-colors"
-        >
-          System Health <ExternalLink className="w-3 h-3" />
-        </Link>
+
+      <div className="relative z-10 p-5 space-y-3.5 bg-white">
+        <p className="text-xs text-slate-600 leading-relaxed">
+          SentinelX correlates live Random Forest IDS classifications, 8-stage DevSecOps audits, and Cloud CSPM drift checks into a verified evidence context for your AI Copilot.
+        </p>
+        <div className="pt-1 flex flex-wrap items-center gap-3 text-xs border-t border-gray-100">
+          <Link
+            href="/assistant"
+            className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 transition-colors pt-2"
+          >
+            Open AI Copilot <ExternalLink className="w-3 h-3" />
+          </Link>
+          <span className="text-gray-300 pt-2">•</span>
+          <Link
+            href="/devsecops"
+            className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-800 transition-colors pt-2"
+          >
+            Launch Audit <ExternalLink className="w-3 h-3" />
+          </Link>
+          <span className="text-gray-300 pt-2">•</span>
+          <Link
+            href="/monitoring"
+            className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 transition-colors pt-2"
+          >
+            System Health <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
       </div>
-    </div>
+    </SpotlightCard>
   );
 
   return (
