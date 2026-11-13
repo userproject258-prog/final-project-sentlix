@@ -596,57 +596,68 @@ export default function AnalyticsPage() {
         <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
         <div className="relative z-10">
-          {/* Card Header & Controls Toolbar */}
-          <div className="p-5 sm:p-6 border-b border-border bg-white flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-purple-50 text-purple-600 rounded-xl group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
-                  <ClipboardList className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
+          {/* Card Header */}
+          <div className="p-5 sm:p-6 border-b border-border/70 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3 min-w-0">
+              <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl border border-purple-100 shrink-0 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-foreground">
                     Audit Observations & Reconnaissance Evidence
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                      {data.audit_summary.total} total
-                    </span>
                   </h2>
-                  <p className="text-xs text-muted mt-0.5">
-                    {data.audit_summary.open} open action items • {data.audit_summary.resolved} resolved across all target assessment stages.
-                  </p>
+                  <span className="inline-flex items-center whitespace-nowrap shrink-0 text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                    {data.audit_summary.total} total
+                  </span>
                 </div>
+                <p className="text-xs text-muted mt-0.5">
+                  {data.audit_summary.open} open action items • {data.audit_summary.resolved} resolved across all target assessment stages.
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
-              {/* Search Input */}
-              <div className="relative w-full sm:w-56">
-                <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search observation, target..."
-                  value={observationSearch}
-                  onChange={(e) => setObservationSearch(e.target.value)}
-                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-border rounded-lg text-foreground focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-                />
-                {observationSearch && (
-                  <button
-                    onClick={() => setObservationSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+            <Link
+              href="/devsecops"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-xs shrink-0 self-start sm:self-auto hover:scale-[1.02]"
+            >
+              <span>Audit Center</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
 
+          {/* Dedicated Filter Toolbar */}
+          <div className="px-5 sm:px-6 py-3 border-b border-border bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            {/* Search Input */}
+            <div className="relative w-full lg:w-80">
+              <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search observation, target..."
+                value={observationSearch}
+                onChange={(e) => setObservationSearch(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              />
+              {observationSearch && (
+                <button
+                  onClick={() => setObservationSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
               {/* Severity Filter Pills */}
-              <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs font-medium shrink-0">
+              <div className="flex flex-wrap items-center bg-white p-0.5 rounded-lg border border-border text-xs font-medium shadow-2xs">
                 {["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((sev) => (
                   <button
                     key={sev}
                     onClick={() => setSeverityFilter(sev)}
-                    className={`px-2 py-1 rounded-md transition-all ${
+                    className={`px-2.5 py-1 rounded-md transition-all whitespace-nowrap ${
                       severityFilter === sev
-                        ? "bg-white text-foreground shadow-2xs font-semibold"
+                        ? "bg-purple-50 text-purple-700 border border-purple-200/80 shadow-2xs font-semibold"
                         : "text-muted hover:text-foreground"
                     }`}
                   >
@@ -659,20 +670,16 @@ export default function AnalyticsPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-xs bg-white border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
+                className="text-xs bg-white border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary shrink-0 shadow-2xs"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="Open">Open</option>
                 <option value="Resolved">Resolved</option>
               </select>
 
-              <Link
-                href="/devsecops"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-xs shrink-0 hover:scale-105"
-              >
-                <span>Audit Center</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
+              <span className="text-[11px] font-mono text-muted px-2 py-1 rounded-md bg-white border border-border/80 whitespace-nowrap">
+                {filteredObservations.length} shown
+              </span>
             </div>
           </div>
 
