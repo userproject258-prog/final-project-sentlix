@@ -30,7 +30,7 @@ export default function AssistantPage() {
   const messageIdRef = useRef(1);
   const autoQueryHandledRef = useRef(false);
 
-  const [keyStatus, setKeyStatus] = useState<{ configured: boolean } | null>(null);
+  const [keyStatus, setKeyStatus] = useState<{ configured: boolean; provider?: string } | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -47,10 +47,11 @@ export default function AssistantPage() {
       .then(res => res.json())
       .then(data => {
         setKeyStatus({
-          configured: !!data.gemini_api_key_configured
+          configured: !!data.gemini_api_key_configured,
+          provider: typeof data.provider === "string" ? data.provider : undefined,
         });
       })
-      .catch(() => setKeyStatus({ configured: false }));
+      .catch(() => setKeyStatus({ configured: false, provider: "Local Summary Mode" }));
   }, []);
 
   const scrollToBottom = () => {
@@ -95,7 +96,12 @@ export default function AssistantPage() {
       if (!response.ok) throw new Error("Assistant request failed");
       const data = await response.json();
       if (typeof data.api_key_configured === "boolean") {
-        setKeyStatus({ configured: data.api_key_configured });
+        setKeyStatus({
+          configured: data.api_key_configured,
+          provider: data.api_key_configured
+            ? (typeof data.provider === "string" ? data.provider : undefined)
+            : "Local Summary Mode",
+        });
       }
 
       messageIdRef.current += 1;
@@ -574,7 +580,13 @@ export default function AssistantPage() {
                 : "bg-amber-50 text-amber-800 border-amber-300"
             }`}>
               <Sparkles className={`w-3.5 h-3.5 ${keyStatus.configured ? "text-emerald-600" : "text-amber-600"}`} />
-              <span>{keyStatus.configured ? "AI Engine Active" : "Local Summary Mode"}</span>
+              <span>
+                {keyStatus.configured
+                  ? (keyStatus.provider && keyStatus.provider !== "Local Summary Mode"
+                      ? `${keyStatus.provider} Active`
+                      : "AI Engine Active")
+                  : "Local Summary Mode"}
+              </span>
             </div>
           )}
 

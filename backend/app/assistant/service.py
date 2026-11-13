@@ -34,8 +34,8 @@ def _clean_key(raw: Optional[str]) -> str:
     if not raw:
         return ""
     cleaned = raw.strip().strip("\"'`").strip()
-    # Extract gsk_ / AIza / AQ. / xai- token if user pasted surrounding text or quotes
-    match = re.search(r"(gsk_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,}|AQ\.[A-Za-z0-9_-]{20,}|xai-[A-Za-z0-9_-]{20,})", cleaned)
+    # Extract gsk_ / AIza / AQ. / xai- / sk- token if user pasted surrounding text or quotes
+    match = re.search(r"(gsk_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,}|AQ\.[A-Za-z0-9_-]{20,}|xai-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,})", cleaned)
     if match:
         return match.group(1)
     return cleaned
@@ -46,7 +46,14 @@ def set_runtime_api_key(key: str) -> str:
     cleaned = _clean_key(key)
     _RUNTIME_API_KEY = cleaned
     if cleaned:
-        os.environ["GEMINI_API_KEY"] = cleaned
+        if cleaned.startswith("gsk_"):
+            os.environ["GROQ_API_KEY"] = cleaned
+        elif cleaned.startswith("xai-"):
+            os.environ["XAI_API_KEY"] = cleaned
+        elif cleaned.startswith("sk-"):
+            os.environ["OPENAI_API_KEY"] = cleaned
+        else:
+            os.environ["GEMINI_API_KEY"] = cleaned
     return cleaned
 
 
@@ -189,15 +196,45 @@ def _load_env_if_needed() -> None:
                 pass
 
 
-def get_gemini_api_key() -> str:
-    if _RUNTIME_API_KEY:
-        return _RUNTIME_API_KEY
+def detect_key_provider(key: Optional[str]) -> str:
+    cleaned = _clean_key(key)
+    if not cleaned:
+        return "Local Summary Mode"
+    if cleaned.startswith("gsk_"):
+        return "Groq"
+    if cleaned.startswith("xai-"):
+        return "xAI Grok"
+    if cleaned.startswith("sk-"):
+        return "OpenAI"
+    return "Google Gemini"
+
+
+def get_candidate_api_keys() -> list[str]:
     _load_env_if_needed()
-    for env_name in ("GEMINI_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"):
-        val = _clean_key(os.getenv(env_name))
-        if val:
-            return val
-    return ""
+    candidates: list[str] = []
+    seen: set[str] = set()
+    raw_values = [_RUNTIME_API_KEY] + [
+        os.getenv(env_name)
+        for env_name in (
+            "GROQ_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GOOGLE_GENAI_API_KEY",
+            "XAI_API_KEY",
+            "OPENAI_API_KEY",
+        )
+    ]
+    for raw in raw_values:
+        val = _clean_key(raw)
+        if val and val not in seen:
+            seen.add(val)
+            candidates.append(val)
+    return candidates
+
+
+def get_gemini_api_key() -> str:
+    candidates = get_candidate_api_keys()
+    return candidates[0] if candidates else ""
 
 
 def validate_gemini_api_key(key: Optional[str] = None) -> bool:
@@ -228,6 +265,16 @@ def validate_gemini_api_key(key: Optional[str] = None) -> bool:
                 _VALIDATED_KEYS_CACHE[api_key] = True
                 return True
             return False
+        if api_key.startswith("sk-"):
+            response = httpx.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=8.0,
+            )
+            if response.status_code == 200:
+                _VALIDATED_KEYS_CACHE[api_key] = True
+                return True
+            return False
         if api_key.startswith("AQ."):
             response = httpx.post(
                 "https://aiplatform.googleapis.com/v1beta1/publishers/google/models/gemini-2.5-flash:generateContent",
@@ -249,10 +296,193 @@ def validate_gemini_api_key(key: Optional[str] = None) -> bool:
             return True
         return False
     except Exception:
-        # If there is a transient DNS/network timeout but the Groq key format is valid, treat as configured
-        if api_key.startswith("gsk_") and len(api_key) >= 45:
+        # If there is a transient DNS/network timeout but a key format is valid, treat as configured
+        if (api_key.startswith("gsk_") or api_key.startswith("sk-")) and len(api_key) >= 40:
             return True
         return False
+
+
+def get_active_provider_status() -> Dict[str, Any]:
+    candidates = get_candidate_api_keys()
+    if not candidates:
+        return {
+            "configured": False,
+            "key_present": False,
+            "key_length": 0,
+            "provider": "Local Summary Mode",
+            "available_providers": [],
+        }
+
+    available_providers: list[str] = []
+    for candidate in candidates:
+        provider = detect_key_provider(candidate)
+        if provider not in available_providers:
+            available_providers.append(provider)
+
+    for candidate in candidates:
+        if validate_gemini_api_key(candidate):
+            return {
+                "configured": True,
+                "key_present": True,
+                "key_length": len(candidate),
+                "provider": detect_key_provider(candidate),
+                "available_providers": available_providers,
+            }
+
+    primary = candidates[0]
+    return {
+        "configured": False,
+        "key_present": True,
+        "key_length": len(primary),
+        "provider": detect_key_provider(primary),
+        "available_providers": available_providers,
+    }
+
+
+def _query_openai_compatible(
+    active_key: str,
+    prompt: str,
+    history_data: list[dict[str, Any]],
+    intent_directive: str,
+    context: Dict[str, Any],
+    context_json: str,
+) -> Optional[Dict[str, Any]]:
+    import httpx
+
+    if active_key.startswith("gsk_"):
+        base_url = "https://api.groq.com/openai/v1/chat/completions"
+        provider_label = "Groq"
+        models_to_try = [
+            "openai/gpt-oss-120b",
+            "qwen/qwen3.8-27b",
+            "openai/gpt-oss-20b",
+            "llama-3.3-70b-versatile",
+            "allam-2-7b",
+        ]
+    elif active_key.startswith("xai-"):
+        base_url = "https://api.x.ai/v1/chat/completions"
+        provider_label = "xAI"
+        models_to_try = ["grok-3", "grok-2-latest", "grok-beta"]
+    else:
+        base_url = "https://api.openai.com/v1/chat/completions"
+        provider_label = "OpenAI"
+        models_to_try = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
+
+    chat_messages = [
+        {
+            "role": "system",
+            "content": (
+                f"{SYSTEM_PROMPT}\n\n"
+                f"{intent_directive}\n\n"
+                f"BACKGROUND TELEMETRY CONTEXT (reference only what is relevant to the user's question):\n{context_json}"
+            ),
+        }
+    ]
+    for turn in history_data:
+        chat_messages.append({"role": turn["role"], "content": turn["content"]})
+    chat_messages.append({"role": "user", "content": prompt})
+
+    with httpx.Client(timeout=35.0) as client:
+        for model in models_to_try:
+            try:
+                response = client.post(
+                    base_url,
+                    headers={"Authorization": f"Bearer {active_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": chat_messages,
+                        "temperature": 0.25,
+                        "max_tokens": 4096,
+                    },
+                )
+                if response.status_code in (401, 403):
+                    break
+                response.raise_for_status()
+                data = response.json()
+                msg = data["choices"][0]["message"]
+                text = (msg.get("content") or "").strip()
+                if text:
+                    _VALIDATED_KEYS_CACHE[active_key] = True
+                    return {
+                        "response": text,
+                        "engine": f"{provider_label} {model}",
+                        "provider": detect_key_provider(active_key),
+                        "context_injected": context.get("available", False),
+                        "api_key_configured": True,
+                    }
+            except Exception as exc:
+                logger.warning("Assistant request failed for %s (%s): %s", provider_label, model, exc)
+    return None
+
+
+def _query_gemini(
+    active_key: str,
+    prompt_text: str,
+    context: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    is_vertex_key = active_key.startswith("AQ.")
+    default_model = "gemini-2.5-flash"
+    candidate_models = [
+        os.getenv("GEMINI_MODEL", default_model),
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-flash-latest",
+    ]
+    seen: set[str] = set()
+    models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+
+    for model in models_to_try:
+        try:
+            from google import genai
+            client = genai.Client(vertexai=is_vertex_key, api_key=active_key)
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt_text,
+                config={"system_instruction": SYSTEM_PROMPT, "temperature": 0.2, "max_output_tokens": 4096},
+            )
+            if resp and resp.text and resp.text.strip():
+                _VALIDATED_KEYS_CACHE[active_key] = True
+                return {
+                    "response": resp.text.strip(),
+                    "engine": f"Google {model}",
+                    "provider": "Google Gemini",
+                    "context_injected": context.get("available", False),
+                    "api_key_configured": True,
+                }
+        except Exception as exc:
+            logger.warning("Assistant SDK request failed for %s: %s", model, exc)
+
+        try:
+            import httpx
+            payload = {
+                "systemInstruction" if is_vertex_key else "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
+                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096},
+            }
+            if is_vertex_key:
+                url = f"https://aiplatform.googleapis.com/v1beta1/publishers/google/models/{model}:generateContent"
+                response = httpx.post(url, headers={"x-goog-api-key": active_key}, json=payload, timeout=30.0)
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                response = httpx.post(url, params={"key": active_key}, json=payload, timeout=30.0)
+            if getattr(response, "status_code", None) in (401, 403):
+                break
+            response.raise_for_status()
+            data = response.json()
+            text = "\n".join(part.get("text", "") for part in data["candidates"][0]["content"]["parts"]).strip()
+            if text:
+                _VALIDATED_KEYS_CACHE[active_key] = True
+                return {
+                    "response": text,
+                    "engine": f"Google {model}",
+                    "provider": "Google Gemini",
+                    "context_injected": context.get("available", False),
+                    "api_key_configured": True,
+                }
+        except Exception as exc:
+            logger.warning("Assistant REST request failed for %s: %s", model, type(exc).__name__)
+    return None
 
 
 def query_assistant(
@@ -266,8 +496,8 @@ def query_assistant(
     except Exception:
         logger.exception("Could not collect assistant context")
         context = {"available": False}
-    key = get_gemini_api_key()
-    if key:
+    candidate_keys = get_candidate_api_keys()
+    if candidate_keys:
         history_data = [{"role": x.get("role"), "content": str(x.get("content", ""))[:1600]}
                         for x in (history or [])[-8:] if x.get("role") in ("user", "assistant")]
         intent_directive = _build_intent_directive(prompt, response_mode)
@@ -279,104 +509,25 @@ def query_assistant(
             f"BACKGROUND TELEMETRY CONTEXT (cite strictly verified fields relevant to the user's question):\n{context_json}"
         )
 
-        if key.startswith("gsk_") or key.startswith("xai-"):
-            import httpx
-            is_groq = key.startswith("gsk_")
-            base_url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else "https://api.x.ai/v1/chat/completions"
-            candidate_keys = [key]
-            models_to_try = (
-                ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
-                if is_groq
-                else ["grok-3", "grok-2-latest", "grok-beta"]
-            )
-            chat_messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        f"{SYSTEM_PROMPT}\n\n"
-                        f"{intent_directive}\n\n"
-                        f"BACKGROUND TELEMETRY CONTEXT (reference only what is relevant to the user's question):\n{context_json}"
-                    ),
-                }
-            ]
-            for turn in history_data:
-                chat_messages.append({"role": turn["role"], "content": turn["content"]})
-            chat_messages.append({"role": "user", "content": prompt})
-
-            with httpx.Client(timeout=35.0) as client:
-                for active_key in candidate_keys:
-                    for model in models_to_try:
-                        try:
-                            response = client.post(
-                                base_url,
-                                headers={"Authorization": f"Bearer {active_key}", "Content-Type": "application/json"},
-                                json={
-                                    "model": model,
-                                    "messages": chat_messages,
-                                    "temperature": 0.25,
-                                    "max_tokens": 4096,
-                                },
-                            )
-                            if response.status_code == 401:
-                                break
-                            response.raise_for_status()
-                            data = response.json()
-                            msg = data["choices"][0]["message"]
-                            text = (msg.get("content") or "").strip()
-                            if text:
-                                _VALIDATED_KEYS_CACHE[active_key] = True
-                                return {
-                                    "response": text,
-                                    "engine": f"{'Groq' if is_groq else 'xAI'} {model}",
-                                    "context_injected": context.get("available", False),
-                                    "api_key_configured": True,
-                                }
-                        except Exception as exc:
-                            logger.warning("Assistant request failed for %s: %s", model, exc)
-            return {"response": _local_response(context, True, prompt), "engine": "Local recorded-data summary",
-                    "context_injected": context.get("available", False), "api_key_configured": False}
-
-        is_vertex_key = key.startswith("AQ.")
-        default_model = "gemini-2.5-flash" if is_vertex_key else "gemini-2.5-flash"
-        candidate_models = [os.getenv("GEMINI_MODEL", default_model), "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-flash-latest"]
-        seen = set()
-        models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
-
-        for model in models_to_try:
-            try:
-                from google import genai
-                client = genai.Client(vertexai=is_vertex_key, api_key=key)
-                resp = client.models.generate_content(
-                    model=model,
-                    contents=prompt_text,
-                    config={"system_instruction": SYSTEM_PROMPT, "temperature": 0.2, "max_output_tokens": 4096},
+        for active_key in candidate_keys:
+            if active_key.startswith("gsk_") or active_key.startswith("xai-") or active_key.startswith("sk-"):
+                result = _query_openai_compatible(
+                    active_key,
+                    prompt,
+                    history_data,
+                    intent_directive,
+                    context,
+                    context_json,
                 )
-                if resp and resp.text and resp.text.strip():
-                    _VALIDATED_KEYS_CACHE[key] = True
-                    return {"response": resp.text.strip(), "engine": f"Google {model}", "context_injected": context.get("available", False), "api_key_configured": True}
-            except Exception as exc:
-                logger.warning("Assistant SDK request failed for %s: %s", model, exc)
+            else:
+                result = _query_gemini(active_key, prompt_text, context)
+            if result is not None:
+                return result
 
-            try:
-                import httpx
-                payload = {
-                    "systemInstruction" if is_vertex_key else "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-                    "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
-                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096},
-                }
-                if is_vertex_key:
-                    url = f"https://aiplatform.googleapis.com/v1beta1/publishers/google/models/{model}:generateContent"
-                    response = httpx.post(url, headers={"x-goog-api-key": key}, json=payload, timeout=30.0)
-                else:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                    response = httpx.post(url, params={"key": key}, json=payload, timeout=30.0)
-                response.raise_for_status()
-                data = response.json()
-                text = "\n".join(part.get("text", "") for part in data["candidates"][0]["content"]["parts"]).strip()
-                if text:
-                    _VALIDATED_KEYS_CACHE[key] = True
-                    return {"response": text, "engine": f"Google {model}", "context_injected": context.get("available", False), "api_key_configured": True}
-            except Exception as exc:
-                logger.warning("Assistant REST request failed for %s: %s", model, type(exc).__name__)
-    return {"response": _local_response(context, bool(key), prompt), "engine": "Local recorded-data summary",
-            "context_injected": context.get("available", False), "api_key_configured": False}
+    return {
+        "response": _local_response(context, bool(candidate_keys), prompt),
+        "engine": "Local recorded-data summary",
+        "provider": "Local Summary Mode",
+        "context_injected": context.get("available", False),
+        "api_key_configured": False,
+    }

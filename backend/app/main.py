@@ -1036,7 +1036,14 @@ class AssistantQuery(BaseModel):
     history: list[AssistantMessage] = Field(default_factory=list, max_length=8)
     response_mode: Literal["deep", "executive", "concise"] = "deep"
 
-from app.assistant.service import query_assistant, get_gemini_api_key, validate_gemini_api_key, set_runtime_api_key
+from app.assistant.service import (
+    query_assistant,
+    get_gemini_api_key,
+    validate_gemini_api_key,
+    set_runtime_api_key,
+    get_active_provider_status,
+    detect_key_provider,
+)
 
 @app.post("/api/assistant/query")
 def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)):
@@ -1050,12 +1057,13 @@ def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)
 
 @app.get("/api/assistant/status")
 def assistant_status():
-    k = get_gemini_api_key()
-    is_valid = validate_gemini_api_key(k)
+    status = get_active_provider_status()
     return {
-        "gemini_api_key_configured": is_valid,
-        "key_present": bool(k),
-        "key_length": len(k) if k else 0
+        "gemini_api_key_configured": status["configured"],
+        "key_present": status["key_present"],
+        "key_length": status["key_length"],
+        "provider": status["provider"],
+        "available_providers": status["available_providers"],
     }
 
 
@@ -1143,12 +1151,20 @@ def get_settings(request: Request, session: Session = Depends(get_session)):
 def update_ai_key(req: AIKeyUpdateRequest):
     clean_key = set_runtime_api_key(req.api_key)
     is_valid = validate_gemini_api_key(clean_key)
+    provider = detect_key_provider(clean_key)
+    engine_map = {
+        "Groq": "Groq openai/gpt-oss-120b",
+        "xAI Grok": "xAI grok-3",
+        "OpenAI": "OpenAI gpt-4o-mini",
+        "Google Gemini": "Google gemini-2.5-flash",
+    }
     masked = f"{clean_key[:4]}••••••••••••{clean_key[-4:]}" if len(clean_key) > 10 else ("Configured" if clean_key else "Not Set")
     return {
         "status": "success",
         "configured": is_valid,
+        "provider": provider if is_valid else "Local Summary Mode",
         "masked_key": masked,
-        "engine": "Google gemini-2.5-flash" if is_valid else "Local recorded-data summary",
+        "engine": engine_map.get(provider, "Google gemini-2.5-flash") if is_valid else "Local recorded-data summary",
     }
 
 @app.post("/api/settings/integrations")

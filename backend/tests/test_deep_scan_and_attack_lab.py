@@ -151,3 +151,84 @@ def test_assistant_intent_routing_and_enriched_context(monkeypatch):
         assert "Executive Security Briefing" in prompt_blob
     engine.dispose()
 
+
+def test_assistant_multi_key_failover_and_local_fallback(monkeypatch):
+    import httpx
+    from sqlmodel import SQLModel, create_engine, Session
+    from app.assistant import service
+
+    monkeypatch.setattr(service, "_RUNTIME_API_KEY", "")
+    monkeypatch.setattr(service, "_load_env_if_needed", lambda: None)
+    monkeypatch.setattr(service, "_VALIDATED_KEYS_CACHE", {})
+    for var in ("GEMINI_API_KEY", "GROQ_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+    monkeypatch.setenv("GEMINI_API_KEY", "AIzaInvalidKeyForFailoverTest123456")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_valid_failover_key_123456789012345678901234567890")
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict):
+            self.status_code = status_code
+            self._payload = payload
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError("err", request=None, response=None)
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, json=None):
+            if "api.groq.com" in url and (headers or {}).get("Authorization", "").startswith("Bearer gsk_valid_"):
+                return FakeResponse(
+                    200,
+                    {"choices": [{"message": {"content": "Groq failover response: enable HSTS and CSP."}}]},
+                )
+            return FakeResponse(401, {"error": "unauthorized"})
+
+    def fake_get(url, **kwargs):
+        if "api.groq.com" in url:
+            return FakeResponse(200, {"data": []})
+        return FakeResponse(401, {"error": "invalid"})
+
+    def fake_post(url, **kwargs):
+        return FakeResponse(401, {"error": "invalid"})
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    status = service.get_active_provider_status()
+    assert status["configured"] is True
+    assert status["provider"] == "Groq"
+
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        result = service.query_assistant("How do I secure HTTP headers?", session=session)
+        assert result["api_key_configured"] is True
+        assert result["provider"] == "Groq"
+        assert result["engine"].startswith("Groq ")
+        assert "Groq failover response" in result["response"]
+
+        # When all candidate providers fail, fall back cleanly to Local Summary Mode
+        monkeypatch.setattr(service, "_VALIDATED_KEYS_CACHE", {})
+        monkeypatch.setenv("GROQ_API_KEY", "gsk_broken_key_12345678901234567890123456789012345")
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        fallback = service.query_assistant("How do I secure HTTP headers?", session=session)
+        assert fallback["api_key_configured"] is False
+        assert fallback["provider"] == "Local Summary Mode"
+        assert fallback["engine"] == "Local recorded-data summary"
+    engine.dispose()
+
+
