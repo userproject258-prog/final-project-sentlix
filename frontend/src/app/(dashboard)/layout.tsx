@@ -37,11 +37,7 @@ export default function DashboardLayout({
       return;
     }
 
-    // Validate session in the background without blocking dashboard rendering or initial data fetch.
-    // If the session is invalid/expired, apiFetch clears localStorage and redirects to /login on 401.
-    void apiFetch(`${API_URL}/api/auth/me`).catch(() => {
-      // Offline / transient network errors shouldn't trap the user behind a permanent spinner
-    });
+    void apiFetch(`${API_URL}/api/auth/me`).catch(() => {});
   }, [hasToken, router]);
 
   if (!hasToken) {

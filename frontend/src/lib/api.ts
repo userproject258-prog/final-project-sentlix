@@ -1,6 +1,5 @@
 const rawApiUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").trim().replace(/\/+$/, "");
 
-// If deployed on railway or modern web with https, upgrade http to https to prevent mixed content blocking
 export const API_URL =
   typeof window !== "undefined" &&
   window.location.protocol === "https:" &&

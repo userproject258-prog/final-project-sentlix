@@ -286,17 +286,14 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" | "error" } | null>(null);
 
-  // AI Key & Default Mode state
   const [newAiKey, setNewAiKey] = useState("");
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [savingAiKey, setSavingAiKey] = useState(false);
   const [testingAiKey, setTestingAiKey] = useState(false);
   const [defaultAssistantMode, setDefaultAssistantMode] = useState<ResponseMode>("deep");
 
-  // Integration action state
   const [busyIntegration, setBusyIntegration] = useState<string | null>(null);
 
-  // API Tokens & Webhooks state
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [newTokenLabel, setNewTokenLabel] = useState("");
   const [selectedScopes, setSelectedScopes] = useState<string[]>(["ci:scan", "threats:write", "cspm:read"]);
@@ -310,7 +307,6 @@ export default function SettingsPage() {
   const [snippetTab, setSnippetTab] = useState<"curl" | "github">("curl");
   const [apiTokens, setApiTokens] = useState<ApiTokenItem[]>(DEFAULT_TOKENS);
 
-  // Profile & Preferences state
   const [editName, setEditName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [prefs, setPrefs] = useState<AlertPolicies>(DEFAULT_POLICIES);
@@ -388,7 +384,7 @@ export default function SettingsPage() {
           }
         }
       } catch {
-        // Ignore storage read errors
+        setApiTokens(DEFAULT_TOKENS);
       }
 
       try {
@@ -415,7 +411,6 @@ export default function SettingsPage() {
     setApiTokens(tokens);
     try {
       if (typeof window !== "undefined") {
-        // Persist masked prefixes for already-saved tokens; keep session value clean
         const sanitized = tokens.map((item) => {
           const rest = { ...item };
           delete rest.token;
@@ -424,7 +419,7 @@ export default function SettingsPage() {
         localStorage.setItem(TOKENS_STORAGE_KEY, JSON.stringify(sanitized));
       }
     } catch {
-      // Ignore storage write errors
+      return;
     }
   };
 
@@ -442,7 +437,7 @@ export default function SettingsPage() {
         localStorage.setItem(MODE_STORAGE_KEY, mode);
       }
     } catch {
-      // Ignore storage errors
+      return;
     }
     showToast(`Default Copilot mode set to "${mode}".`, "info");
   };
@@ -707,7 +702,6 @@ export default function SettingsPage() {
     })
   );
 
-  /* ---------------- Modular Section Blocks ---------------- */
 
   const aiCopilotCard = (
     <SpotlightCard accent="amber" className="w-full">
@@ -767,7 +761,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Failover Order Preview */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5">
@@ -815,7 +808,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Runtime Key Updater */}
         <form onSubmit={handleUpdateAiKey} className="space-y-2.5 pt-1 border-t border-gray-100">
           <label className="block text-xs font-semibold text-gray-700">
             Configure Runtime Provider Key (
@@ -957,7 +949,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Search & Filter Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="relative flex-1 max-w-sm">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1107,7 +1098,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="relative z-10 p-5 space-y-6">
-        {/* Webhook Endpoint Box */}
         <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/90 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
@@ -1167,7 +1157,6 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* One-time reveal banner after generating key */}
         {latestCreatedToken && (
           <div className="p-3.5 rounded-xl bg-emerald-50/90 border border-emerald-200 space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -1199,7 +1188,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Generate New Token Form with Scope Selector */}
         <form onSubmit={handleGenerateToken} className="space-y-3">
           <div className="flex flex-col sm:flex-row gap-2.5">
             <input
@@ -1240,7 +1228,6 @@ export default function SettingsPage() {
           </div>
         </form>
 
-        {/* Active Tokens List */}
         <div className="space-y-2.5">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Active Scoped Tokens</h3>
           <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
@@ -1556,7 +1543,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fade-in">
-      {/* Header Banner Card with Cursor-Tracking Spotlight */}
       <SpotlightCard accent="blue" className="p-6">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5 min-w-0">
@@ -1604,7 +1590,6 @@ export default function SettingsPage() {
         </div>
       </SpotlightCard>
 
-      {/* Top Status KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="animate-slide-up stagger-1 opacity-0">
           <SpotlightCard accent="amber" hoverLift className="p-4 h-full">
@@ -1703,7 +1688,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Category Filter Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto bg-white border border-gray-200 rounded-2xl p-1.5 shadow-xs">
         {[
           { id: "overview" as const, label: "All Settings", icon: Settings, badge: null },
@@ -1761,7 +1745,6 @@ export default function SettingsPage() {
         })}
       </div>
 
-      {/* Focused or Bento Main Workspace */}
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-2 space-y-6">
@@ -1806,7 +1789,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Floating Non-Shifting Toast Notification */}
       {toast && (
         <div
           role="status"

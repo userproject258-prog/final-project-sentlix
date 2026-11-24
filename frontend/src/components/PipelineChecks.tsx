@@ -310,7 +310,6 @@ export function PipelineChecks({
           </div>
         )}
 
-        {/* Unified 4-column summary bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-md border border-border bg-slate-50/50 overflow-hidden">
           {[
             { label: "Total runs", value: runs.length, color: "text-slate-900" },

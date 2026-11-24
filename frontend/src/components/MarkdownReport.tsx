@@ -23,7 +23,6 @@ import {
   FileCode,
 } from "lucide-react";
 
-// Strip any residual unicode emojis or raw symbols
 export function stripEmojis(str: string): string {
   if (!str) return "";
   return str
@@ -34,10 +33,6 @@ export function stripEmojis(str: string): string {
     .trim();
 }
 
-/**
- * Normalize line endings and escaped line breaks while preserving the
- * structure of headings, tables, lists, and code blocks.
- */
 export function normalizeMarkdownText(raw: string): string {
   if (!raw) return "";
   const text = stripEmojis(raw)
@@ -56,13 +51,11 @@ export function normalizeMarkdownText(raw: string): string {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Table rows (starts with | or contains | with end |) - MUST preserve intact!
     if (trimmed.startsWith("|") && trimmed.includes("|")) {
       output.push(trimmed);
       continue;
     }
 
-    // Horizontal rule
     if (/^---+$/.test(trimmed)) {
       output.push("---");
       continue;
@@ -74,7 +67,6 @@ export function normalizeMarkdownText(raw: string): string {
   return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-// Severity Badges with real Lucide Icons
 export function SeverityBadge({ level }: { level: string }) {
   const clean = stripEmojis(level).toLowerCase().trim();
   if (clean.includes("crit") || clean.includes("red")) {
@@ -117,7 +109,6 @@ export function SeverityBadge({ level }: { level: string }) {
   );
 }
 
-// Status Badges with real Lucide Icons
 export function StatusBadge({ status }: { status: string }) {
   const clean = stripEmojis(status).toLowerCase().trim();
   if (
@@ -182,7 +173,6 @@ export function StatusBadge({ status }: { status: string }) {
   return <span>{stripEmojis(status)}</span>;
 }
 
-// Helper to choose a contextual icon for headings
 function getHeadingIcon(title: string) {
   const t = title.toLowerCase();
   if (t.includes("dns") || t.includes("ip") || t.includes("network") || t.includes("topology") || t.includes("asn") || t.includes("geolocation")) {
@@ -224,17 +214,14 @@ function getHeadingIcon(title: string) {
   return <Shield className="w-4 h-4 text-primary flex-shrink-0" />;
 }
 
-// Inline token renderer with smart formatting, code badges, and bold styling
 function Inline({ text, cell = false }: { text: string; cell?: boolean }) {
   const cleanStr = stripEmojis(text);
   const plain = cleanStr.replace(/[*_`]/g, "").trim();
 
-  // If cell is exact severity keyword
   if (cell && /^(critical|high|medium|low|info)$/i.test(plain)) {
     return <SeverityBadge level={plain} />;
   }
 
-  // If cell is exact status keyword
   if (
     cell &&
     /^(present|missing|passed|failed|active|compliant|protected|controlled|monitored|recommended|yes|no|valid|error|clean|exposed|forbidden|redirected|normal)$/i.test(
@@ -244,13 +231,11 @@ function Inline({ text, cell = false }: { text: string; cell?: boolean }) {
     return <StatusBadge status={plain} />;
   }
 
-  // Parse markdown bold, code, links, and italics cleanly
   const parts = cleanStr.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|\*[^*]+\*)/g).filter(Boolean);
 
   return (
     <span>
       {parts.map((p, i) => {
-        // Bold: **text**
         if (p.startsWith("**") && p.endsWith("**") && p.length >= 4) {
           return (
             <strong key={i} className="font-semibold text-foreground">
@@ -258,7 +243,6 @@ function Inline({ text, cell = false }: { text: string; cell?: boolean }) {
             </strong>
           );
         }
-        // Inline code: `code`
         if (p.startsWith("`") && p.endsWith("`") && p.length >= 2) {
           return (
             <code
@@ -269,7 +253,6 @@ function Inline({ text, cell = false }: { text: string; cell?: boolean }) {
             </code>
           );
         }
-        // Link: [text](url)
         const linkMatch = p.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
         if (linkMatch) {
           return (
@@ -284,7 +267,6 @@ function Inline({ text, cell = false }: { text: string; cell?: boolean }) {
             </a>
           );
         }
-        // Italics: *text*
         if (p.startsWith("*") && p.endsWith("*") && p.length >= 2) {
           return (
             <span key={i} className="italic text-muted-foreground">
@@ -420,7 +402,6 @@ export default function MarkdownReport({ content, compact = false }: { content: 
   while (i < lines.length) {
     const t = lines[i].trim();
 
-    // **Key:** value  → metadata card
     const kvm = t.match(/^\*\*([^*]+?):\*\*\s*(.+)$/);
     if (kvm) {
       kv.push({ k: kvm[1], v: kvm[2] });
@@ -434,7 +415,6 @@ export default function MarkdownReport({ content, compact = false }: { content: 
       continue;
     }
 
-    // Code blocks
     if (t.startsWith("```")) {
       const lang = t.replace(/^```/, "").trim();
       const codeLines: string[] = [];
@@ -460,7 +440,6 @@ export default function MarkdownReport({ content, compact = false }: { content: 
       continue;
     }
 
-    // Markdown Table
     if (t.startsWith("|") && t.includes("|")) {
       const rows: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().includes("|")) {
@@ -473,7 +452,6 @@ export default function MarkdownReport({ content, compact = false }: { content: 
       }
     }
 
-    // Blockquotes
     if (t.startsWith(">")) {
       const quoteText = t.replace(/^>\s*/, "");
       blocks.push(
@@ -486,7 +464,6 @@ export default function MarkdownReport({ content, compact = false }: { content: 
       continue;
     }
 
-    // Headings (#, ##, ###, ####)
     const h = t.match(/^(#{1,4})\s+(.+)$/);
     if (h) {
       const level = h[1].length;
@@ -513,14 +490,12 @@ export default function MarkdownReport({ content, compact = false }: { content: 
       continue;
     }
 
-    // Horizontal rule
     if (/^-{3,}$/.test(t)) {
       blocks.push(<hr key={`hr-${i}`} className="my-4 border-border/50" />);
       i++;
       continue;
     }
 
-    // Bullet or Numbered Lists
     if (/^([-*•]|\d+\.)\s+/.test(t)) {
       const ordered = /^\d+\./.test(t);
       const items: { text: string; nested: boolean }[] = [];
@@ -553,7 +528,6 @@ export default function MarkdownReport({ content, compact = false }: { content: 
       continue;
     }
 
-    // Regular Paragraph
     blocks.push(
       <p key={`p-${i}`} className="my-2 text-sm text-foreground/85 leading-relaxed">
         <Inline text={t} />

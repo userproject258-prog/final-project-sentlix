@@ -419,7 +419,6 @@ export default function DevSecOpsPage() {
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-6 pb-12">
-      {/* Flat Enterprise Header */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border">
         <div className="min-w-0">
           <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
@@ -483,7 +482,6 @@ export default function DevSecOpsPage() {
         </div>
       </header>
 
-      {/* Connection / Validation / Error Notices */}
       {connectionError && (
         <div
           role="alert"
@@ -552,7 +550,6 @@ export default function DevSecOpsPage() {
         </div>
       )}
 
-      {/* Unified 4-Column Summary Strip */}
       <section
         aria-label="Assessment summary metrics"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-white shadow-xs overflow-hidden"
@@ -625,7 +622,6 @@ export default function DevSecOpsPage() {
         </button>
       </section>
 
-      {/* Workspace Section Tabs — Keeps Each View Compact Without Excessive Vertical Scrolling */}
       <nav aria-label="Assessment workspace sections" className="border-b border-border flex items-center gap-1 overflow-x-auto">
         {[
           { id: "assessment" as const, label: "Assessment & Report", count: null },
@@ -657,7 +653,6 @@ export default function DevSecOpsPage() {
 
       {workspaceTab === "assessment" && (
         <>
-      {/* Assessment Configuration (8 cols) & Current Session Overview (4 cols) */}
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
         <section className="lg:col-span-8 rounded-lg border border-border bg-white shadow-xs overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
@@ -671,7 +666,6 @@ export default function DevSecOpsPage() {
           </div>
 
           <form onSubmit={handleLaunch} className="space-y-5 p-5">
-            {/* Target URL */}
             <div>
               <label htmlFor="audit-target" className="mb-1.5 block text-xs font-semibold text-slate-700">
                 Target domain, IP, or URL <span className="text-red-600">*</span>
@@ -705,7 +699,6 @@ export default function DevSecOpsPage() {
               </div>
             </div>
 
-            {/* Scanning Depth Profile */}
             <fieldset disabled={isRunning} className="min-w-0">
               <legend className="mb-2 block text-xs font-semibold text-slate-700">Scanning depth profile</legend>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -770,7 +763,6 @@ export default function DevSecOpsPage() {
               </div>
             </fieldset>
 
-            {/* Execution Mode & Analysis Provider Side-by-Side */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
               <fieldset disabled={isRunning} className="md:col-span-8">
                 <legend className="mb-2 block text-xs font-semibold text-slate-700">Assessment mode</legend>
@@ -828,7 +820,6 @@ export default function DevSecOpsPage() {
               </div>
             </div>
 
-            {/* Authorization */}
             <label
               className={`flex items-start gap-2.5 rounded-md border border-border bg-slate-50 px-3.5 py-3 transition-colors ${
                 isRunning ? "opacity-60" : "cursor-pointer hover:bg-slate-100/70"
@@ -848,7 +839,6 @@ export default function DevSecOpsPage() {
               </span>
             </label>
 
-            {/* Form Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
               <div className="flex items-center gap-2">
                 <button
@@ -877,7 +867,6 @@ export default function DevSecOpsPage() {
           </form>
         </section>
 
-        {/* Right Column: Current Session Metadata */}
         <aside
           className="lg:col-span-4 rounded-lg border border-border bg-white shadow-xs overflow-hidden"
           aria-label="Assessment overview"
@@ -953,7 +942,6 @@ export default function DevSecOpsPage() {
         </aside>
       </div>
 
-      {/* Live Assessment Pipeline */}
       {audit && audit.status !== "idle" && (
         <section
           className="rounded-lg border border-border bg-white shadow-xs overflow-hidden"
@@ -1018,7 +1006,6 @@ export default function DevSecOpsPage() {
           </div>
 
           <div className="space-y-5 p-5">
-            {/* Stage Grid */}
             <ol className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
               {audit.pipeline?.map((item, idx) => {
                 const isDone = idx < audit.completed;
@@ -1063,7 +1050,6 @@ export default function DevSecOpsPage() {
               })}
             </ol>
 
-            {/* Activity Log & Tools Grid */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <section
                 className="min-w-0 overflow-hidden rounded-md border border-border bg-white"
@@ -1141,7 +1127,6 @@ export default function DevSecOpsPage() {
         </section>
       )}
 
-      {/* Executive Findings & Structured Report */}
       {audit?.report ? (
         <section className="rounded-lg border border-border bg-white shadow-xs overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1161,7 +1146,6 @@ export default function DevSecOpsPage() {
             </button>
           </div>
 
-          {/* Unified Severity Mentions Bar (replaces duplicate cards + bar box) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border bg-slate-50/40">
             {[
               { label: "Critical", count: audit.counts?.Critical || 0, text: "text-red-700", bar: "bg-red-600" },
@@ -1184,7 +1168,6 @@ export default function DevSecOpsPage() {
             ))}
           </div>
 
-          {/* Section Underline Tabs */}
           <div className="border-b border-border px-5 flex items-center gap-1 overflow-x-auto flex-nowrap">
             {reportSections.map((sec, idx) => {
               const isSelected =
@@ -1208,7 +1191,6 @@ export default function DevSecOpsPage() {
             })}
           </div>
 
-          {/* Active Report Body */}
           <div className="p-5 space-y-5">
             <div className="rounded-md border border-border bg-white p-4 sm:p-5">
               <MarkdownReport
@@ -1220,7 +1202,6 @@ export default function DevSecOpsPage() {
               />
             </div>
 
-            {/* Individual Stage Logs */}
             {audit.reports && Object.keys(audit.reports).length > 0 && (
               <div className="pt-4 border-t border-border space-y-2.5">
                 <div className="flex items-center justify-between text-xs">

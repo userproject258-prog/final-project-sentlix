@@ -41,7 +41,6 @@ export default function MonitoringPage() {
       fetch(`${API_URL}/api/monitoring/metrics`)
         .then((res) => res.json())
         .then((data) => {
-          // Format time for chart display
           const formatted = data.metrics.map((m: SystemMetric) => ({
             ...m,
             timeLabel: new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -84,7 +83,6 @@ export default function MonitoringPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fade-in">
-      {/* Header Banner Card with Cursor-Tracking Spotlight */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-surface border border-border hover:border-emerald-400/60 p-6 rounded-2xl shadow-xs hover:shadow-lg hover:shadow-emerald-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out"
@@ -119,7 +117,6 @@ export default function MonitoringPage() {
         </div>
       </div>
 
-      {/* Top Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="System Status"
@@ -155,9 +152,7 @@ export default function MonitoringPage() {
         />
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* CPU & Memory */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 p-5 sm:p-6 rounded-2xl shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out"
@@ -207,7 +202,6 @@ export default function MonitoringPage() {
           </div>
         </div>
 
-        {/* Network */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 p-5 sm:p-6 rounded-2xl shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1 transition-all duration-300 ease-out"

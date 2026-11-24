@@ -232,7 +232,6 @@ export default function AssistantPage() {
   };
 
   const renderMarkdownBlock = (blockText: string, blockIdx: number, isUser: boolean) => {
-    // Normalize spaced-out markdown table rows (e.g. blank lines between | rows |)
     const rawLines = blockText.split("\n");
     const lines: string[] = [];
     for (let i = 0; i < rawLines.length; i++) {
@@ -247,7 +246,7 @@ export default function AssistantPage() {
           }
         }
         if (prevNonEmpty.startsWith("|") && nextNonEmpty.startsWith("|")) {
-          continue; // Collapse blank line inside a markdown table
+          continue;
         }
       }
       lines.push(curr);
@@ -266,7 +265,6 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Horizontal Rule
       if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
         elements.push(
           <hr
@@ -278,11 +276,10 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Markdown Table
       if (trimmed.startsWith("|") && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
         const headers = parseTableRow(trimmed);
         const colCount = Math.max(headers.length, 1);
-        i += 2; // Skip header and separator
+        i += 2;
         const rows: string[][] = [];
         while (i < lines.length && lines[i].trim().startsWith("|")) {
           if (!isTableSeparator(lines[i])) {
@@ -341,7 +338,6 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Headings
       const headingMatch = trimmed.match(/^(#{1,4})\s+(.*)$/);
       if (headingMatch) {
         const level = headingMatch[1].length;
@@ -394,7 +390,6 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Unordered List
       if (/^[-*•]\s+/.test(trimmed)) {
         const items: string[] = [];
         while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
@@ -416,7 +411,6 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Ordered List
       if (/^\d+\.\s+/.test(trimmed)) {
         const items: string[] = [];
         while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
@@ -438,7 +432,6 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Blockquote
       if (trimmed.startsWith(">")) {
         const quoteText = trimmed.replace(/^>\s*/, "");
         elements.push(
@@ -457,7 +450,6 @@ export default function AssistantPage() {
         continue;
       }
 
-      // Regular Paragraph
       elements.push(
         <p
           key={`p-${blockIdx}-${i}`}
@@ -525,7 +517,6 @@ export default function AssistantPage() {
       onMouseMove={handleCardMouseMove}
       className="relative group flex flex-col h-[calc(100vh-8rem)] max-w-5xl mx-auto bg-surface border border-border hover:border-blue-400/60 rounded-2xl shadow-xs hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 overflow-hidden"
     >
-      {/* Cursor Spotlight Glow */}
       <div
         className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"
         style={{
@@ -533,10 +524,8 @@ export default function AssistantPage() {
             "radial-gradient(420px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.05), transparent 80%)",
         }}
       />
-      {/* Top Animated Accent Bar */}
       <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center z-20" />
 
-      {/* Header */}
       <div className="relative z-10 px-5 py-4 border-b border-border bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:-rotate-6 transition-transform duration-300">
@@ -557,7 +546,6 @@ export default function AssistantPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Response Mode Selector */}
           <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-medium">
             {[
               { id: "deep" as const, label: "Deep Technical" },
@@ -618,7 +606,6 @@ export default function AssistantPage() {
         </span>
       </div>
 
-      {/* Messages Area */}
       <div className="relative z-10 flex-1 overflow-y-auto p-5 space-y-5 bg-gray-50/50">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex gap-3.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
@@ -679,7 +666,6 @@ export default function AssistantPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Prompts Bar */}
       <div className="relative z-10 px-4 py-2.5 bg-white border-t border-border flex items-center gap-2 overflow-x-auto text-xs">
         <span className="text-muted shrink-0 flex items-center gap-1 font-medium">
           <Sparkles className="w-3.5 h-3.5 text-primary" /> Playbooks:
@@ -697,7 +683,6 @@ export default function AssistantPage() {
         ))}
       </div>
 
-      {/* Input Form */}
       <div className="relative z-10 p-4 bg-white border-t border-border">
         <form onSubmit={handleSubmit} className="flex items-end gap-2.5">
           <textarea

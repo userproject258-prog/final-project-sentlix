@@ -43,7 +43,6 @@ export default function AlertsPage() {
     let closed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // Setup live WebSocket connection to SentinelX
     const connectWs = () => {
       try {
         const ws = new WebSocket(WS_URL, websocketProtocols());
@@ -74,7 +73,6 @@ export default function AlertsPage() {
 
         ws.onclose = () => {
           setWsConnected(false);
-          // Auto-reconnect after 3 seconds
           if (!closed) reconnectTimer = setTimeout(connectWs, 3000);
         };
 

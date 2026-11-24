@@ -73,7 +73,6 @@ export default function ThreatDetectionPage() {
   const [updatingThreatId, setUpdatingThreatId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
   const [trafficFilter, setTrafficFilter] = useState<string>("ALL");
@@ -177,7 +176,6 @@ export default function ThreatDetectionPage() {
     }
   };
 
-  // Metrics Calculations
   const criticalCount = useMemo(
     () => threats.filter((t) => t.severity === "CRITICAL").length,
     [threats]
@@ -208,7 +206,6 @@ export default function ThreatDetectionPage() {
     return Math.round(sum / valid.length);
   }, [threats]);
 
-  // Filtered Events
   const filteredThreats = useMemo(() => {
     return threats.filter((item) => {
       const query = searchQuery.trim().toLowerCase();
@@ -236,7 +233,6 @@ export default function ThreatDetectionPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fade-in">
-      {/* Feedback Banner */}
       {actionFeedback && (
         <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium animate-slide-up shadow-xs">
           <div className="flex items-center gap-2">
@@ -252,12 +248,10 @@ export default function ThreatDetectionPage() {
         </div>
       )}
 
-      {/* Header Banner Card with Mouse Tracking Animation */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-surface p-6 rounded-2xl border border-border hover:border-rose-400/60 shadow-xs hover:shadow-lg hover:shadow-rose-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out"
       >
-        {/* Cursor Spotlight Glow */}
         <div
           className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           style={{
@@ -265,7 +259,6 @@ export default function ThreatDetectionPage() {
               "radial-gradient(350px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(225, 29, 72, 0.07), transparent 80%)",
           }}
         />
-        {/* Top Animated Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-rose-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
         <div className="flex items-start sm:items-center gap-3.5 relative z-10 min-w-0">
@@ -312,17 +305,13 @@ export default function ThreatDetectionPage() {
         </div>
       </div>
 
-      {/* Traffic Simulator Bar */}
       <TrafficSimulator onComplete={fetchThreats} />
 
-      {/* 5 TOP TELEMETRY KPI CARDS WITH CURSOR-TRACKING SPOTLIGHT */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Card 1: Total Recorded Threats */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          {/* Cursor Spotlight Glow */}
           <div
             className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             style={{
@@ -330,7 +319,6 @@ export default function ThreatDetectionPage() {
                 "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.09), transparent 80%)",
             }}
           />
-          {/* Top Animated Accent Bar */}
           <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
           <div className="flex items-center justify-between mb-3 relative z-10">
@@ -356,12 +344,10 @@ export default function ThreatDetectionPage() {
           </div>
         </div>
 
-        {/* Card 2: Critical Danger */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-red-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-red-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          {/* Cursor Spotlight Glow */}
           <div
             className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             style={{
@@ -369,7 +355,6 @@ export default function ThreatDetectionPage() {
                 "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(220, 38, 38, 0.09), transparent 80%)",
             }}
           />
-          {/* Top Animated Accent Bar */}
           <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-red-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
           <div className="flex items-center justify-between mb-3 relative z-10">
@@ -393,12 +378,10 @@ export default function ThreatDetectionPage() {
           </div>
         </div>
 
-        {/* Card 3: Unique Attacker Sources */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-amber-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          {/* Cursor Spotlight Glow */}
           <div
             className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             style={{
@@ -406,7 +389,6 @@ export default function ThreatDetectionPage() {
                 "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(217, 119, 6, 0.09), transparent 80%)",
             }}
           />
-          {/* Top Animated Accent Bar */}
           <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-amber-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
           <div className="flex items-center justify-between mb-3 relative z-10">
@@ -428,12 +410,10 @@ export default function ThreatDetectionPage() {
           </div>
         </div>
 
-        {/* Card 4: AI Model Confidence */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          {/* Cursor Spotlight Glow */}
           <div
             className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             style={{
@@ -441,7 +421,6 @@ export default function ThreatDetectionPage() {
                 "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
             }}
           />
-          {/* Top Animated Accent Bar */}
           <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
           <div className="flex items-center justify-between mb-3 relative z-10">
@@ -463,12 +442,10 @@ export default function ThreatDetectionPage() {
           </div>
         </div>
 
-        {/* Card 5: RF-IDS Model Accuracy */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-purple-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
         >
-          {/* Cursor Spotlight Glow */}
           <div
             className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             style={{
@@ -476,7 +453,6 @@ export default function ThreatDetectionPage() {
                 "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(147, 51, 234, 0.09), transparent 80%)",
             }}
           />
-          {/* Top Animated Accent Bar */}
           <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
           <div className="flex items-center justify-between mb-3 relative z-10">
@@ -501,13 +477,11 @@ export default function ThreatDetectionPage() {
         </div>
       </div>
 
-      {/* RF-IDS MODEL PERFORMANCE & FEATURE ATTRIBUTION */}
       {modelTelemetry && (
         <section
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-indigo-400/70 rounded-2xl p-5 sm:p-6 shadow-xs hover:shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out"
         >
-          {/* Cursor Spotlight Glow */}
           <div
             className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             style={{
@@ -571,7 +545,6 @@ export default function ThreatDetectionPage() {
 
             {showModelDetails && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Feature Importance */}
               <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5 text-indigo-600" />
@@ -596,7 +569,6 @@ export default function ThreatDetectionPage() {
                 </div>
               </div>
 
-              {/* Confusion Matrix Validation Table */}
               <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
                   Holdout Evaluation Matrix (2,000 Flows)
@@ -637,12 +609,10 @@ export default function ThreatDetectionPage() {
         </section>
       )}
 
-      {/* THREAT DATA TABLE (INTERACTIVE INCIDENT COMMAND CENTER) */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/60 rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 ease-out"
       >
-        {/* Cursor Spotlight Glow */}
         <div
           className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           style={{
@@ -650,11 +620,9 @@ export default function ThreatDetectionPage() {
               "radial-gradient(400px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.04), transparent 80%)",
           }}
         />
-        {/* Top Animated Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
         <div className="relative z-10">
-          {/* Table Header */}
           <div className="p-5 border-b border-border/70 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
@@ -676,9 +644,7 @@ export default function ThreatDetectionPage() {
             </div>
           </div>
 
-          {/* Dedicated Search & Filter Toolbar */}
           <div className="px-5 py-3 border-b border-border bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            {/* Search input */}
             <div className="relative w-full lg:w-72">
               <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -699,7 +665,6 @@ export default function ThreatDetectionPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Severity Pills */}
               <div className="flex flex-wrap items-center bg-white p-0.5 rounded-lg border border-border text-xs font-medium shadow-2xs">
                 {["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((sev) => (
                   <button
@@ -716,7 +681,6 @@ export default function ThreatDetectionPage() {
                 ))}
               </div>
 
-              {/* Traffic Filter */}
               <select
                 value={trafficFilter}
                 onChange={(e) => setTrafficFilter(e.target.value)}
@@ -727,7 +691,6 @@ export default function ThreatDetectionPage() {
                 <option value="SIMULATED">Simulated Only</option>
               </select>
 
-              {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -741,7 +704,6 @@ export default function ThreatDetectionPage() {
             </div>
           </div>
 
-          {/* Table Body */}
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead className="text-[11px] text-muted uppercase bg-gray-50/70 border-b border-border">
@@ -795,13 +757,11 @@ export default function ThreatDetectionPage() {
 
                     return (
                       <tr key={row.id} className="hover:bg-gray-50/80 transition-colors">
-                        {/* Event ID & Time */}
                         <td className="pl-5 pr-2.5 py-2.5 whitespace-nowrap">
                           <div className="font-mono font-bold text-foreground">{row.id}</div>
                           <div className="text-[11px] text-muted mt-0.5">{row.time}</div>
                         </td>
 
-                        {/* Classification */}
                         <td className="px-2.5 py-2.5 whitespace-nowrap">
                           <div className="font-semibold text-foreground flex items-center gap-1.5">
                             <span>{row.type}</span>
@@ -813,7 +773,6 @@ export default function ThreatDetectionPage() {
                           </div>
                         </td>
 
-                        {/* Source IP */}
                         <td className="px-2.5 py-2.5 whitespace-nowrap">
                           <div className="flex items-center gap-1">
                             <span
@@ -837,12 +796,10 @@ export default function ThreatDetectionPage() {
                           </div>
                         </td>
 
-                        {/* Destination */}
                         <td className="px-2.5 py-2.5 whitespace-nowrap font-mono text-muted text-[11px] max-w-[130px] truncate" title={row.destination}>
                           {row.destination}
                         </td>
 
-                        {/* AI Confidence */}
                         <td className="px-2.5 py-2.5 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-semibold text-foreground text-[11px] w-10">
@@ -863,7 +820,6 @@ export default function ThreatDetectionPage() {
                           </div>
                         </td>
 
-                        {/* Severity */}
                         <td className="px-2.5 py-2.5 whitespace-nowrap">
                           <span
                             className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border ${
@@ -880,7 +836,6 @@ export default function ThreatDetectionPage() {
                           </span>
                         </td>
 
-                        {/* Interactive Triage Status */}
                         <td className="px-2.5 py-2.5 whitespace-nowrap">
                           <div className="inline-flex items-center rounded-lg border border-border bg-white p-0.5 shadow-2xs">
                             {(["Open", "Investigating", "Resolved"] as const).map((st) => {
@@ -911,7 +866,6 @@ export default function ThreatDetectionPage() {
                           </div>
                         </td>
 
-                        {/* AI Copilot Ask */}
                         <td className="pl-2.5 pr-5 py-2.5 whitespace-nowrap text-right">
                           <Link
                             href={`/assistant?q=Analyze attack event ${row.id} of type ${row.type} from IP ${row.source} directed at ${row.destination} and suggest immediate mitigation.`}
@@ -929,7 +883,6 @@ export default function ThreatDetectionPage() {
             </table>
           </div>
 
-          {/* Table Footer */}
           <div className="p-4 border-t border-border bg-gray-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted">
             <span>
               Displaying {filteredThreats.length} of {threats.length} recorded threat incidents

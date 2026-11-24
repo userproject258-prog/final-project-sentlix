@@ -8,7 +8,7 @@ export function RiskScoreCard({ score }: RiskScoreCardProps) {
   let colorClass = "text-success";
   if (score >= 80) colorClass = "text-critical";
   else if (score >= 60) colorClass = "text-warning";
-  else if (score >= 30) colorClass = "text-info"; // using info for medium
+  else if (score >= 30) colorClass = "text-info";
 
   return (
     <div className="bg-surface border-sentinel rounded-lg p-5 shadow-sm flex flex-col justify-center items-center h-full">

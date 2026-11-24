@@ -101,7 +101,6 @@ export default function CSPMPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Cloud Security Posture Management</h1>
@@ -129,7 +128,6 @@ export default function CSPMPage() {
         </div>
       )}
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-1 bg-surface border border-sentinel rounded-xl p-5 shadow-xs flex flex-col items-center justify-center text-center">
           <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Posture Score</div>
@@ -147,7 +145,6 @@ export default function CSPMPage() {
         </div>
       </div>
 
-      {/* Findings Table */}
       <div className="bg-surface border border-sentinel rounded-xl shadow-xs overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">

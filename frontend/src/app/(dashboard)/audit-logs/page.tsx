@@ -15,7 +15,6 @@ interface AuditLog {
 
 function csvCell(value: string | number) {
   let text = String(value);
-  // Prevent spreadsheet programs from interpreting untrusted values as formulas.
   if (/^[\s\u0000-\u001f]*[=+@-]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
@@ -94,7 +93,6 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fade-in">
-      {/* Header Banner Card with Cursor-Tracking Spotlight */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group flex flex-col gap-4 rounded-2xl border border-gray-200 hover:border-blue-400/60 bg-white p-6 shadow-xs hover:shadow-lg hover:shadow-blue-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out sm:flex-row sm:items-center sm:justify-between"
@@ -133,7 +131,6 @@ export default function AuditLogsPage() {
         </div>
       )}
 
-      {/* 3 Telemetry KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div
           onMouseMove={handleCardMouseMove}
@@ -202,7 +199,6 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
-      {/* Main Audit Table Card with Cursor Spotlight */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group rounded-2xl border border-gray-200 hover:border-blue-400/60 bg-white shadow-xs hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 ease-out"

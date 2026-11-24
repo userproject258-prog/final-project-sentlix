@@ -33,7 +33,6 @@ const severityStyles: Record<string, string> = {
 
 function formatTime(value: string) {
   if (!value) return "Time unavailable";
-  // SQLite may return UTC timestamps without a timezone suffix.
   const timestamp = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}Z`;
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime())
@@ -163,7 +162,6 @@ export function AuditObservations({
           </div>
         )}
 
-        {/* Unified 3-column summary bar */}
         <div className="grid grid-cols-3 divide-x divide-border rounded-md border border-border bg-slate-50/50 overflow-hidden">
           {[
             { label: "Recorded", value: findings.length, color: "text-slate-900" },

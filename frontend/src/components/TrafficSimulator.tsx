@@ -92,7 +92,6 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
   const [error, setError] = useState("");
   const [lastResult, setLastResult] = useState<SimulationResult | null>(null);
 
-  // Custom Vector Lab state
   const [customTarget, setCustomTarget] = useState("10.0.1.100:443");
   const [customIp, setCustomIp] = useState("");
   const [packetSize, setPacketSize] = useState<number>(1400);
@@ -101,7 +100,6 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
   const [uniquePorts, setUniquePorts] = useState<number>(1);
   const [bytesSent, setBytesSent] = useState<number>(11500);
 
-  // Benchmark Suite state
   const [benchmarkTarget, setBenchmarkTarget] = useState("prod-edge-gw");
   const [benchmarkLogEvents, setBenchmarkLogEvents] = useState(false);
   const [benchmarkRunning, setBenchmarkRunning] = useState(false);
@@ -270,7 +268,6 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
       className="relative overflow-hidden group rounded-2xl border border-border hover:border-rose-300 bg-surface shadow-xs hover:shadow-md transition-all duration-300"
       aria-label="Attack testing and intrusion simulation platform"
     >
-      {/* Cursor Spotlight Glow */}
       <div
         className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
         style={{
@@ -278,10 +275,8 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
             "radial-gradient(360px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(225, 29, 72, 0.06), transparent 80%)",
         }}
       />
-      {/* Top Animated Accent Bar */}
       <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-rose-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
-      {/* Top Header Strip */}
       <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 bg-white">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200/80 shrink-0 group-hover:scale-105 group-hover:-rotate-6 transition-transform duration-300">
@@ -319,10 +314,8 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
         </button>
       </div>
 
-      {/* Expanded Platform Panel */}
       {open && (
         <div id="traffic-simulator-form" className="relative z-10 space-y-5 border-t border-border bg-slate-50/40 p-5">
-          {/* Sub-navigation Tabs */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-border shadow-2xs">
               {[
@@ -355,7 +348,6 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
             </span>
           </div>
 
-          {/* TAB 1: SCENARIO REPLAY */}
           {labTab === "scenarios" && (
             <div className="bg-white rounded-xl border border-border p-4 sm:p-5 space-y-4 shadow-2xs">
               <form onSubmit={simulateScenario} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -461,7 +453,6 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
             </div>
           )}
 
-          {/* TAB 2: CUSTOM VECTOR LAB */}
           {labTab === "custom" && (
             <form onSubmit={simulateCustomVector} className="bg-white rounded-xl border border-border p-4 sm:p-5 space-y-4 shadow-2xs">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
@@ -622,7 +613,6 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
             </form>
           )}
 
-          {/* TAB 3: AUTOMATED ML BENCHMARK SUITE */}
           {labTab === "benchmark" && (
             <div className="bg-white rounded-xl border border-border p-4 sm:p-5 space-y-4 shadow-2xs">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
@@ -749,14 +739,12 @@ export function TrafficSimulator({ onComplete }: { onComplete: () => void }) {
             </div>
           )}
 
-          {/* Error Banner */}
           {error && (
             <p role="alert" className="flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
               <AlertCircle className="h-4 w-4 shrink-0" /> {error}
             </p>
           )}
 
-          {/* Live Telemetry & ML Feature Attribution Inspector for Last Run */}
           {lastResult && labTab !== "benchmark" && (
             <div
               role="status"

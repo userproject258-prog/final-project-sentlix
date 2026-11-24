@@ -79,7 +79,6 @@ export default function AnalyticsPage() {
   const [error, setError] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
 
-  // Search & Filter State for Audit Observations
   const [observationSearch, setObservationSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -151,7 +150,6 @@ export default function AnalyticsPage() {
     };
   }, []);
 
-  // Filtered Audit Observations
   const filteredObservations = useMemo(() => {
     if (!data?.audit_summary?.recent) return [];
     return data.audit_summary.recent.filter((obs) => {
@@ -172,7 +170,6 @@ export default function AnalyticsPage() {
     });
   }, [data, observationSearch, severityFilter, statusFilter]);
 
-  // Derived KPI Stats
   const totalThreatEvents = useMemo(() => {
     if (!data?.severity_distribution) return 0;
     return data.severity_distribution.reduce((acc, curr) => acc + curr.value, 0);
@@ -224,12 +221,10 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fade-in">
-      {/* Header Banner Card with Mouse Tracking Animation */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-surface p-6 rounded-2xl border border-border hover:border-blue-400/60 shadow-xs hover:shadow-lg hover:shadow-blue-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out"
       >
-        {/* Cursor Spotlight Glow */}
         <div
           className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           style={{
@@ -237,7 +232,6 @@ export default function AnalyticsPage() {
               "radial-gradient(350px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.07), transparent 80%)",
           }}
         />
-        {/* Top Animated Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
         <div className="flex items-start sm:items-center gap-3.5 relative z-10 min-w-0">
@@ -280,9 +274,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* 4 TOP TELEMETRY KPI METRIC BOXES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Total Recorded Incidents */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
@@ -317,7 +309,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Metric 2: Critical Severity Pressure */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-red-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-red-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
@@ -352,7 +343,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Metric 3: Open Audit Observations */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-amber-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
@@ -385,7 +375,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Metric 4: Resolved & Remediated */}
         <div
           onMouseMove={handleCardMouseMove}
           className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
@@ -419,9 +408,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* CHARTS GRID: 30-DAY TIMELINE & SEVERITY PIE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Trend Area Chart (8 cols) */}
         <div
           onMouseMove={handleCardMouseMove}
           className="lg:col-span-7 xl:col-span-8 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-2xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
@@ -488,7 +475,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Severity Distribution Pie Chart (4 cols) */}
         <div
           onMouseMove={handleCardMouseMove}
           className="lg:col-span-5 xl:col-span-4 relative overflow-hidden group bg-surface border border-border hover:border-orange-400/80 rounded-2xl p-5 shadow-xs hover:shadow-lg hover:shadow-orange-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
@@ -582,12 +568,10 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* AUDIT OBSERVATIONS COMMAND CARD (THE USER'S CORE REQUEST) */}
       <div
         onMouseMove={handleCardMouseMove}
         className="relative overflow-hidden group bg-surface border border-border hover:border-purple-400/80 rounded-2xl shadow-xs hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300 ease-out"
       >
-        {/* Cursor Spotlight Glow */}
         <div
           className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           style={{
@@ -595,11 +579,9 @@ export default function AnalyticsPage() {
               "radial-gradient(380px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(147, 51, 234, 0.08), transparent 80%)",
           }}
         />
-        {/* Top Animated Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
 
         <div className="relative z-10">
-          {/* Card Header */}
           <div className="p-5 sm:p-6 border-b border-border/70 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3 min-w-0">
               <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl border border-purple-100 shrink-0 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
@@ -629,9 +611,7 @@ export default function AnalyticsPage() {
             </Link>
           </div>
 
-          {/* Dedicated Filter Toolbar */}
           <div className="px-5 sm:px-6 py-3 border-b border-border bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            {/* Search Input */}
             <div className="relative w-full lg:w-80">
               <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -652,7 +632,6 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Severity Filter Pills */}
               <div className="flex flex-wrap items-center bg-white p-0.5 rounded-lg border border-border text-xs font-medium shadow-2xs">
                 {["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((sev) => (
                   <button
@@ -669,7 +648,6 @@ export default function AnalyticsPage() {
                 ))}
               </div>
 
-              {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -686,7 +664,6 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Observations Grid Body */}
           <div className="p-5 sm:p-6">
             {filteredObservations.length === 0 ? (
               <div className="p-8 text-center text-muted border border-dashed border-border rounded-xl bg-gray-50/50 flex flex-col items-center justify-center">
@@ -717,7 +694,6 @@ export default function AnalyticsPage() {
                       className="p-4 rounded-xl border border-border bg-white hover:border-purple-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between"
                     >
                       <div>
-                        {/* Title & Severity */}
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <h4 className="text-xs sm:text-sm font-bold text-foreground leading-snug line-clamp-2">
                             {finding.title}
@@ -737,7 +713,6 @@ export default function AnalyticsPage() {
                           </span>
                         </div>
 
-                        {/* Target Endpoint & Copy */}
                         <div className="flex items-center gap-1.5 text-xs text-muted mb-3 font-mono bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">
                           <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="truncate flex-1 text-slate-700 font-medium">{finding.target}</span>
@@ -755,7 +730,6 @@ export default function AnalyticsPage() {
                         </div>
                       </div>
 
-                      {/* Footer Actions */}
                       <div className="pt-3 border-t border-border/60 flex items-center justify-between text-[11px]">
                         <span
                           className={`inline-flex items-center gap-1 font-semibold rounded-full px-2 py-0.5 ${
@@ -796,7 +770,6 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* Footer Bar */}
           <div className="p-4 border-t border-border bg-gray-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted">
             <span>
               Displaying {filteredObservations.length} of {data.audit_summary.recent.length} recent audit observations

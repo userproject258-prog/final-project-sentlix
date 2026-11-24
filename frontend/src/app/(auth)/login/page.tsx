@@ -34,7 +34,6 @@ export default function LoginPage() {
         throw new Error(data.detail || "Invalid login credentials");
       }
 
-      // Store authenticated session and warm initial dashboard payload in parallel with navigation
       if (typeof window !== "undefined") {
         clearApiCache();
         localStorage.setItem("sentinelx_token", data.token);

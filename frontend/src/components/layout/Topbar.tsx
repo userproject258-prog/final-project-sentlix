@@ -23,7 +23,6 @@ function getStoredUserName() {
       if (u.name) return u.name as string;
     }
   } catch {
-    // Ignore parse errors
   }
   return "SecOps Analyst";
 }

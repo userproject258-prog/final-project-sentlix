@@ -31,7 +31,6 @@ export default function RegisterPage() {
         throw new Error(data.detail || "Registration failed");
       }
 
-      // Store authenticated session
       if (typeof window !== "undefined") {
         localStorage.setItem("sentinelx_token", data.token);
         localStorage.setItem("sentinelx_user", JSON.stringify(data.user));

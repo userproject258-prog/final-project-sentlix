@@ -203,7 +203,6 @@ export default function OverviewPage() {
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Table filters & search
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -282,7 +281,7 @@ export default function OverviewPage() {
               void fetchOverview();
             }
           } catch {
-            // Ignore malformed WS payloads
+            return;
           }
         };
 
@@ -490,7 +489,6 @@ export default function OverviewPage() {
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-6 pb-12">
-      {/* Page Header — Flat Enterprise Bar */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
@@ -546,7 +544,6 @@ export default function OverviewPage() {
         </div>
       </header>
 
-      {/* Operational Notice Bar */}
       {(actionFeedback || lastNotification) && (
         <div
           role="status"
@@ -570,12 +567,10 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* Optional On-Demand Attack Simulation Lab */}
       {showAttackLab && (
         <TrafficSimulator onComplete={() => void fetchOverview()} />
       )}
 
-      {/* Row 1: Unified 5-Column Enterprise KPI Strip */}
       <section
         aria-label="Key security metrics"
         className="bg-white border border-border rounded-lg shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border overflow-hidden"
@@ -685,9 +680,7 @@ export default function OverviewPage() {
         </Link>
       </section>
 
-      {/* Row 2: Security Posture Scorecard (7 cols) + Platform Operations Summary (5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Security Posture & Domain Risk Breakdown */}
         <section className="lg:col-span-7 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div>
@@ -738,7 +731,6 @@ export default function OverviewPage() {
               </div>
             </div>
 
-            {/* Clean Risk Scale Bar */}
             <div className="space-y-1.5">
               <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                 <div
@@ -755,7 +747,6 @@ export default function OverviewPage() {
               </div>
             </div>
 
-            {/* Sub-pillar Breakdown */}
             {data.posture?.breakdown && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-border">
                 {[
@@ -784,7 +775,6 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Platform Health & Operations Status Table */}
         <section className="lg:col-span-5 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div>
@@ -899,9 +889,7 @@ export default function OverviewPage() {
         </section>
       </div>
 
-      {/* Row 3: Telemetry Charts (8 cols + 4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* 14-Day Threat Activity Timeline */}
         <section className="lg:col-span-8 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
           <div className="px-5 py-3.5 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
@@ -950,7 +938,6 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Threat Vector Breakdown */}
         <section className="lg:col-span-4 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div>
@@ -987,9 +974,7 @@ export default function OverviewPage() {
         </section>
       </div>
 
-      {/* Row 4: Actionable Triage Queues (Alerts + CSPM) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-        {/* Active Alerts Queue */}
         <section className="bg-white border border-border rounded-lg shadow-xs flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -1048,7 +1033,6 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Cloud Policy Drift (CSPM) */}
         <section className="bg-white border border-border rounded-lg shadow-xs flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -1117,7 +1101,6 @@ export default function OverviewPage() {
         </section>
       </div>
 
-      {/* Row 5: Recorded Threat Incidents Table with Integrated Top Source IP Quick-Filters */}
       <section className="bg-white border border-border rounded-lg shadow-xs overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div className="min-w-0">
@@ -1186,7 +1169,6 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Integrated Top Attacking Sources Filter Strip */}
         {data.top_sources && data.top_sources.length > 0 && (
           <div className="px-5 py-2.5 border-b border-border bg-slate-50/60 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-[11px] font-medium text-slate-500 mr-1">Top source IPs:</span>
