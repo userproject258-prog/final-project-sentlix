@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { API_URL, WS_URL, apiFetch, getCachedData, setCachedData, websocketProtocols } from "@/lib/api";
 import { TrafficSimulator } from "@/components/TrafficSimulator";
+import { HoverCard, HoverTileOverlay, handleSpotlightMove } from "@/components/ui/HoverCard";
 import {
   Activity,
   ArrowUpRight,
@@ -573,115 +574,135 @@ export default function OverviewPage() {
 
       <section
         aria-label="Key security metrics"
-        className="bg-white border border-border rounded-lg shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border overflow-hidden"
+        className="bg-white border border-border rounded-lg shadow-xs hover:shadow-md transition-shadow duration-300 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border overflow-hidden"
       >
         <Link
           href="/threats"
-          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 transition-colors duration-300 flex flex-col justify-between gap-2"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span>Total Threats</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
-              {data.stats.threats}
-            </span>
-            <TrendTag direction={data.trends.threats?.direction} value={data.trends.threats?.value} />
-          </div>
-          <div className="text-[11px] text-slate-500 tabular-nums">
-            {data.stats.open_threats ?? 0} open · {data.stats.threats_24h ?? 0} last 24h
+          <HoverTileOverlay accent="blue" />
+          <div className="relative z-10 flex flex-col justify-between gap-2 h-full">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Total Threats</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+                {data.stats.threats}
+              </span>
+              <TrendTag direction={data.trends.threats?.direction} value={data.trends.threats?.value} />
+            </div>
+            <div className="text-[11px] text-slate-500 tabular-nums">
+              {data.stats.open_threats ?? 0} open · {data.stats.threats_24h ?? 0} last 24h
+            </div>
           </div>
         </Link>
 
         <Link
           href="/threats"
-          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 transition-colors duration-300 flex flex-col justify-between gap-2"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span>Critical Events</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span
-              className={`text-2xl font-semibold font-mono tabular-nums ${
-                data.stats.critical > 0 ? "text-red-600" : "text-slate-900"
-              }`}
-            >
-              {data.stats.critical}
-            </span>
-            <TrendTag direction={data.trends.critical?.direction} value={data.trends.critical?.value} />
-          </div>
-          <div className="text-[11px] text-slate-500 tabular-nums">
-            {data.stats.open_critical ?? 0} requiring triage
+          <HoverTileOverlay accent="rose" />
+          <div className="relative z-10 flex flex-col justify-between gap-2 h-full">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Critical Events</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span
+                className={`text-2xl font-semibold font-mono tabular-nums ${
+                  data.stats.critical > 0 ? "text-red-600" : "text-slate-900"
+                }`}
+              >
+                {data.stats.critical}
+              </span>
+              <TrendTag direction={data.trends.critical?.direction} value={data.trends.critical?.value} />
+            </div>
+            <div className="text-[11px] text-slate-500 tabular-nums">
+              {data.stats.open_critical ?? 0} requiring triage
+            </div>
           </div>
         </Link>
 
         <Link
           href="/cspm"
-          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 transition-colors duration-300 flex flex-col justify-between gap-2"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span>Cloud Posture</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
-              {data.stats.cloud_security_score}%
-            </span>
-            <span className="text-[11px] font-mono text-emerald-700 font-medium">
-              {data.cspm?.resolved ?? 0} fixed
-            </span>
-          </div>
-          <div className="text-[11px] text-slate-500 tabular-nums">
-            {data.cspm?.open ?? 0} open misconfigurations
+          <HoverTileOverlay accent="emerald" />
+          <div className="relative z-10 flex flex-col justify-between gap-2 h-full">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Cloud Posture</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+                {data.stats.cloud_security_score}%
+              </span>
+              <span className="text-[11px] font-mono text-emerald-700 font-medium">
+                {data.cspm?.resolved ?? 0} fixed
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500 tabular-nums">
+              {data.cspm?.open ?? 0} open misconfigurations
+            </div>
           </div>
         </Link>
 
         <Link
           href="/alerts"
-          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 transition-colors duration-300 flex flex-col justify-between gap-2"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span>Active Alerts</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
+          <HoverTileOverlay accent="amber" />
+          <div className="relative z-10 flex flex-col justify-between gap-2 h-full">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Active Alerts</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+                {data.stats.active_alerts ?? data.alerts?.active ?? 0}
+              </span>
+              <span className="text-[11px] font-mono text-slate-500">
+                <span className="text-red-600 font-medium">{data.alerts?.by_severity?.CRITICAL ?? 0}C</span> /{" "}
+                <span className="text-amber-600 font-medium">{data.alerts?.by_severity?.HIGH ?? 0}H</span>
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500">Open incident queue</div>
           </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
-              {data.stats.active_alerts ?? data.alerts?.active ?? 0}
-            </span>
-            <span className="text-[11px] font-mono text-slate-500">
-              <span className="text-red-600 font-medium">{data.alerts?.by_severity?.CRITICAL ?? 0}C</span> /{" "}
-              <span className="text-amber-600 font-medium">{data.alerts?.by_severity?.HIGH ?? 0}H</span>
-            </span>
-          </div>
-          <div className="text-[11px] text-slate-500">Open incident queue</div>
         </Link>
 
         <Link
           href="/devsecops"
-          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 transition-colors duration-300 flex flex-col justify-between gap-2"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span>CI/CD Gate Pass</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
-              {effectivePassRate !== null && effectivePassRate !== undefined ? `${effectivePassRate}%` : "Active"}
-            </span>
-            <span className="text-[11px] font-mono text-slate-500">
-              {totalRuns > 0 ? `${effectivePassedRuns}/${totalRuns}` : "Ready"}
-            </span>
-          </div>
-          <div className="text-[11px] text-slate-500">
-            {data.stats.open_audit_findings ?? data.audit?.open ?? 0} open audit findings
+          <HoverTileOverlay accent="violet" />
+          <div className="relative z-10 flex flex-col justify-between gap-2 h-full">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>CI/CD Gate Pass</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+                {effectivePassRate !== null && effectivePassRate !== undefined ? `${effectivePassRate}%` : "Active"}
+              </span>
+              <span className="text-[11px] font-mono text-slate-500">
+                {totalRuns > 0 ? `${effectivePassedRuns}/${totalRuns}` : "Ready"}
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {data.stats.open_audit_findings ?? data.audit?.open ?? 0} open audit findings
+            </div>
           </div>
         </Link>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        <section className="lg:col-span-7 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+        <HoverCard accent="amber" className="lg:col-span-7 flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Security Posture & Risk Breakdown</h2>
@@ -773,9 +794,9 @@ export default function OverviewPage() {
               </div>
             )}
           </div>
-        </section>
+        </HoverCard>
 
-        <section className="lg:col-span-5 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+        <HoverCard accent="indigo" className="lg:col-span-5 flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">System & Sensor Health</h2>
@@ -886,11 +907,11 @@ export default function OverviewPage() {
               </div>
             </div>
           </div>
-        </section>
+        </HoverCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        <section className="lg:col-span-8 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+        <HoverCard accent="blue" className="lg:col-span-8 flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Threat Activity (14 Days)</h2>
@@ -936,9 +957,9 @@ export default function OverviewPage() {
               </ResponsiveContainer>
             </div>
           </div>
-        </section>
+        </HoverCard>
 
-        <section className="lg:col-span-4 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+        <HoverCard accent="violet" className="lg:col-span-4 flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Attack Vectors</h2>
@@ -971,11 +992,11 @@ export default function OverviewPage() {
               </ResponsiveContainer>
             </div>
           </div>
-        </section>
+        </HoverCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-        <section className="bg-white border border-border rounded-lg shadow-xs flex flex-col">
+        <HoverCard accent="rose" className="flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <h2 className="text-sm font-semibold text-slate-900 truncate">Active Alerts</h2>
@@ -1031,9 +1052,9 @@ export default function OverviewPage() {
               ))
             )}
           </div>
-        </section>
+        </HoverCard>
 
-        <section className="bg-white border border-border rounded-lg shadow-xs flex flex-col">
+        <HoverCard accent="emerald" className="flex flex-col">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <h2 className="text-sm font-semibold text-slate-900 truncate">Cloud Policy Drift (CSPM)</h2>
@@ -1098,10 +1119,10 @@ export default function OverviewPage() {
               ))
             )}
           </div>
-        </section>
+        </HoverCard>
       </div>
 
-      <section className="bg-white border border-border rounded-lg shadow-xs overflow-hidden">
+      <HoverCard accent="blue">
         <div className="px-5 py-4 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -1370,7 +1391,7 @@ export default function OverviewPage() {
             Open Threat Detection Console <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
-      </section>
+      </HoverCard>
     </div>
   );
 }

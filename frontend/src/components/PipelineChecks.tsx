@@ -133,7 +133,7 @@ function CheckCard({
   fallbackScope: string;
 }) {
   return (
-    <div className="rounded-md border border-border bg-white p-3.5">
+    <div className="rounded-md border border-border hover:border-violet-300/90 bg-white p-3.5 hover:shadow-sm hover:shadow-violet-500/10 transition-all duration-200">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-900">
           {icon}
@@ -160,6 +160,12 @@ function CheckCard({
 }
 
 const PAGE_SIZE = 5;
+
+function handleSpotlightMove(e: React.MouseEvent<HTMLElement>) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+  e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+}
 
 export function PipelineChecks({
   runs,
@@ -212,8 +218,20 @@ export function PipelineChecks({
   }
 
   return (
-    <details open={defaultOpen || undefined} className="group/pipeline rounded-lg border border-border bg-white shadow-xs overflow-hidden">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50/70 transition-colors marker:content-none [&::-webkit-details-marker]:hidden">
+    <div
+      onMouseMove={handleSpotlightMove}
+      className="relative overflow-hidden group rounded-lg border border-border hover:border-violet-400/80 bg-white shadow-xs hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-300 ease-out"
+    >
+      <div
+        className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+        style={{
+          background:
+            "radial-gradient(380px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(139, 92, 246, 0.08), transparent 80%)",
+        }}
+      />
+      <div className="pointer-events-none absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-violet-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center z-20" />
+      <details open={defaultOpen || undefined} className="relative z-10 group/pipeline">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50/50 transition-colors marker:content-none [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-3 min-w-0">
           <ShieldCheck className="h-4 w-4 shrink-0 text-slate-600" />
           <div className="min-w-0">
@@ -312,15 +330,30 @@ export function PipelineChecks({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-md border border-border bg-slate-50/50 overflow-hidden">
           {[
-            { label: "Total runs", value: runs.length, color: "text-slate-900" },
-            { label: "Passed", value: passed, color: "text-emerald-700" },
-            { label: "Failed", value: failed, color: "text-red-700" },
-            { label: "Incomplete", value: incomplete, color: "text-amber-700" },
+            { label: "Total runs", value: runs.length, color: "text-slate-900", glow: "rgba(99, 102, 241, 0.11)", bar: "via-indigo-500" },
+            { label: "Passed", value: passed, color: "text-emerald-700", glow: "rgba(16, 185, 129, 0.11)", bar: "via-emerald-500" },
+            { label: "Failed", value: failed, color: "text-red-700", glow: "rgba(225, 29, 72, 0.11)", bar: "via-rose-500" },
+            { label: "Incomplete", value: incomplete, color: "text-amber-700", glow: "rgba(245, 158, 11, 0.12)", bar: "via-amber-500" },
           ].map((item) => (
-            <div key={item.label} className="px-4 py-3">
-              <div className="text-[11px] font-medium text-slate-500">{item.label}</div>
-              <div className={`mt-1 text-lg font-semibold font-mono tabular-nums ${item.color}`}>
-                {loading || (loadError && runs.length === 0) ? "—" : item.value}
+            <div
+              key={item.label}
+              onMouseMove={handleSpotlightMove}
+              className="relative overflow-hidden group/tile px-4 py-3"
+            >
+              <div
+                className="pointer-events-none absolute -inset-px opacity-0 group-hover/tile:opacity-100 transition-opacity duration-300"
+                style={{
+                  background: `radial-gradient(180px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), ${item.glow}, transparent 80%)`,
+                }}
+              />
+              <div
+                className={`pointer-events-none absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent ${item.bar} to-transparent scale-x-0 group-hover/tile:scale-x-100 transition-transform duration-300 origin-center`}
+              />
+              <div className="relative z-10">
+                <div className="text-[11px] font-medium text-slate-500">{item.label}</div>
+                <div className={`mt-1 text-lg font-semibold font-mono tabular-nums ${item.color}`}>
+                  {loading || (loadError && runs.length === 0) ? "—" : item.value}
+                </div>
               </div>
             </div>
           ))}
@@ -414,7 +447,10 @@ export function PipelineChecks({
               )}
             </div>
             {visibleRuns.map((run) => (
-              <article key={run.id} className="overflow-hidden rounded-md border border-border bg-white">
+              <article
+                key={run.id}
+                className="overflow-hidden rounded-md border border-border hover:border-violet-300/90 bg-white hover:shadow-md hover:shadow-violet-500/10 hover:-translate-y-0.5 transition-all duration-200"
+              >
                 <div className="p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -531,6 +567,7 @@ export function PipelineChecks({
           </div>
         )}
       </div>
-    </details>
+      </details>
+    </div>
   );
 }

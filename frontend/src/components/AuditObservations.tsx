@@ -54,6 +54,12 @@ export function filterAuditFindings(findings: AuditFinding[], search: string, st
 
 const PAGE_SIZE = 6;
 
+function handleSpotlightMove(e: React.MouseEvent<HTMLElement>) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+  e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+}
+
 export function AuditObservations({
   findings,
   loading,
@@ -105,8 +111,20 @@ export function AuditObservations({
   }
 
   return (
-    <details open={defaultOpen || undefined} className="group/obs rounded-lg border border-border bg-white shadow-xs overflow-hidden">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50/70 transition-colors marker:content-none [&::-webkit-details-marker]:hidden">
+    <div
+      onMouseMove={handleSpotlightMove}
+      className="relative overflow-hidden group rounded-lg border border-border hover:border-blue-400/80 bg-white shadow-xs hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 ease-out"
+    >
+      <div
+        className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+        style={{
+          background:
+            "radial-gradient(380px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
+        }}
+      />
+      <div className="pointer-events-none absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center z-20" />
+      <details open={defaultOpen || undefined} className="relative z-10 group/obs">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50/50 transition-colors marker:content-none [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-3 min-w-0">
           <ClipboardList className="h-4 w-4 shrink-0 text-slate-600" />
           <div className="min-w-0">
@@ -164,14 +182,29 @@ export function AuditObservations({
 
         <div className="grid grid-cols-3 divide-x divide-border rounded-md border border-border bg-slate-50/50 overflow-hidden">
           {[
-            { label: "Recorded", value: findings.length, color: "text-slate-900" },
-            { label: "Open", value: openCount, color: "text-amber-700" },
-            { label: "Resolved", value: resolvedCount, color: "text-emerald-700" },
+            { label: "Recorded", value: findings.length, color: "text-slate-900", glow: "rgba(37, 99, 235, 0.10)", bar: "via-blue-500" },
+            { label: "Open", value: openCount, color: "text-amber-700", glow: "rgba(245, 158, 11, 0.12)", bar: "via-amber-500" },
+            { label: "Resolved", value: resolvedCount, color: "text-emerald-700", glow: "rgba(16, 185, 129, 0.11)", bar: "via-emerald-500" },
           ].map((item) => (
-            <div key={item.label} className="px-4 py-3">
-              <div className="text-[11px] font-medium text-slate-500">{item.label}</div>
-              <div className={`mt-1 text-lg font-semibold font-mono tabular-nums ${item.color}`}>
-                {loading || (loadError && findings.length === 0) ? "—" : item.value}
+            <div
+              key={item.label}
+              onMouseMove={handleSpotlightMove}
+              className="relative overflow-hidden group/tile px-4 py-3"
+            >
+              <div
+                className="pointer-events-none absolute -inset-px opacity-0 group-hover/tile:opacity-100 transition-opacity duration-300"
+                style={{
+                  background: `radial-gradient(180px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), ${item.glow}, transparent 80%)`,
+                }}
+              />
+              <div
+                className={`pointer-events-none absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent ${item.bar} to-transparent scale-x-0 group-hover/tile:scale-x-100 transition-transform duration-300 origin-center`}
+              />
+              <div className="relative z-10">
+                <div className="text-[11px] font-medium text-slate-500">{item.label}</div>
+                <div className={`mt-1 text-lg font-semibold font-mono tabular-nums ${item.color}`}>
+                  {loading || (loadError && findings.length === 0) ? "—" : item.value}
+                </div>
               </div>
             </div>
           ))}
@@ -282,7 +315,10 @@ export function AuditObservations({
             {visibleFindings.map((finding) => {
               const resolved = finding.status === "Resolved";
               return (
-                <article key={finding.id} className="overflow-hidden rounded-md border border-border bg-white">
+                <article
+                  key={finding.id}
+                  className="overflow-hidden rounded-md border border-border hover:border-blue-300/90 bg-white hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200"
+                >
                   <div className="p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -368,6 +404,7 @@ export function AuditObservations({
           </div>
         )}
       </div>
-    </details>
+      </details>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/
 import MarkdownReport, { stripEmojis, normalizeMarkdownText } from "@/components/MarkdownReport";
 import { AuditObservations, type AuditFinding } from "@/components/AuditObservations";
 import { PipelineChecks, type ManualPipelineStatus, type PipelineRun } from "@/components/PipelineChecks";
+import { HoverCard, HoverTileOverlay, handleSpotlightMove } from "@/components/ui/HoverCard";
 import {
   Activity,
   AlertCircle,
@@ -552,73 +553,97 @@ export default function DevSecOpsPage() {
 
       <section
         aria-label="Assessment summary metrics"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-white shadow-xs overflow-hidden"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-white shadow-xs hover:shadow-md transition-shadow duration-300 overflow-hidden"
       >
         <button
           type="button"
           onClick={() => setWorkspaceTab("assessment")}
-          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 text-left transition-colors duration-300 flex flex-col justify-between gap-2"
         >
-          <span className="text-xs font-medium text-slate-500">Stage Progress</span>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
-              {audit ? `${stageCompleted}/${stageTotal}` : "—"}
+          <HoverTileOverlay accent="blue" />
+          <div className="relative z-10 flex flex-col justify-between gap-2 h-full w-full">
+            <span className="text-xs font-medium text-slate-500 group-hover:text-blue-700 transition-colors">
+              Stage Progress
             </span>
-            <span className="text-[11px] font-mono text-slate-500 tabular-nums">{audit ? `${stagePct}%` : "Idle"}</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-            <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${stagePct}%` }} />
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
+                {audit ? `${stageCompleted}/${stageTotal}` : "—"}
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 tabular-nums">{audit ? `${stagePct}%` : "Idle"}</span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${stagePct}%` }} />
+            </div>
           </div>
         </button>
 
         <button
           type="button"
           onClick={() => setWorkspaceTab("observations")}
-          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-1.5"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 text-left transition-colors duration-300 flex flex-col justify-between gap-1.5"
         >
-          <span className="text-xs font-medium text-slate-500">Audit Observations</span>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
-              {findingsLoading ? "—" : openFindingsCount}
+          <HoverTileOverlay accent="amber" />
+          <div className="relative z-10 flex flex-col justify-between gap-1.5 h-full w-full">
+            <span className="text-xs font-medium text-slate-500 group-hover:text-amber-700 transition-colors">
+              Audit Observations
             </span>
-            <span className="text-[11px] font-mono text-slate-500 tabular-nums">
-              {findingsLoading ? "" : `${findings.length} total`}
-            </span>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
+                {findingsLoading ? "—" : openFindingsCount}
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 tabular-nums">
+                {findingsLoading ? "" : `${findings.length} total`}
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-500">Open evidence items across runs</span>
           </div>
-          <span className="text-[11px] text-slate-500">Open evidence items across runs</span>
         </button>
 
         <button
           type="button"
           onClick={() => setWorkspaceTab("pipeline")}
-          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-1.5"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 text-left transition-colors duration-300 flex flex-col justify-between gap-1.5"
         >
-          <span className="text-xs font-medium text-slate-500">Pipeline Checks</span>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
-              {pipelineLoading ? "—" : `${passedPipelineCount}/${pipelineRuns.length}`}
+          <HoverTileOverlay accent="emerald" />
+          <div className="relative z-10 flex flex-col justify-between gap-1.5 h-full w-full">
+            <span className="text-xs font-medium text-slate-500 group-hover:text-emerald-700 transition-colors">
+              Pipeline Checks
             </span>
-            <span className="text-[11px] font-mono text-emerald-700">passed</span>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
+                {pipelineLoading ? "—" : `${passedPipelineCount}/${pipelineRuns.length}`}
+              </span>
+              <span className="text-[11px] font-mono text-emerald-700">passed</span>
+            </div>
+            <span className="text-[11px] text-slate-500">SAST, secrets, dependencies, config</span>
           </div>
-          <span className="text-[11px] text-slate-500">SAST, secrets, dependencies, config</span>
         </button>
 
         <button
           type="button"
           onClick={() => setWorkspaceTab("assessment")}
-          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-1.5"
+          onMouseMove={handleSpotlightMove}
+          className="relative overflow-hidden group p-4 text-left transition-colors duration-300 flex flex-col justify-between gap-1.5"
         >
-          <span className="text-xs font-medium text-slate-500">Report Severity Mentions</span>
-          <div className="flex items-baseline gap-2 font-mono text-sm font-semibold tabular-nums">
-            <span className="text-red-600">{audit?.counts?.Critical ?? 0}C</span>
-            <span className="text-slate-300">·</span>
-            <span className="text-amber-600">{audit?.counts?.High ?? 0}H</span>
-            <span className="text-slate-300">·</span>
-            <span className="text-blue-600">{audit?.counts?.Medium ?? 0}M</span>
-            <span className="text-slate-300">·</span>
-            <span className="text-slate-600">{audit?.counts?.Low ?? 0}L</span>
+          <HoverTileOverlay accent="rose" />
+          <div className="relative z-10 flex flex-col justify-between gap-1.5 h-full w-full">
+            <span className="text-xs font-medium text-slate-500 group-hover:text-rose-700 transition-colors">
+              Report Severity Mentions
+            </span>
+            <div className="flex items-baseline gap-2 font-mono text-sm font-semibold tabular-nums">
+              <span className="text-red-600">{audit?.counts?.Critical ?? 0}C</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-amber-600">{audit?.counts?.High ?? 0}H</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-blue-600">{audit?.counts?.Medium ?? 0}M</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-slate-600">{audit?.counts?.Low ?? 0}L</span>
+            </div>
+            <span className="text-[11px] text-slate-500">Text mentions, not verified counts</span>
           </div>
-          <span className="text-[11px] text-slate-500">Text mentions, not verified counts</span>
         </button>
       </section>
 
@@ -654,7 +679,7 @@ export default function DevSecOpsPage() {
       {workspaceTab === "assessment" && (
         <>
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
-        <section className="lg:col-span-8 rounded-lg border border-border bg-white shadow-xs overflow-hidden">
+        <HoverCard accent="blue" className="lg:col-span-8">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Configure Assessment</h2>
@@ -865,12 +890,9 @@ export default function DevSecOpsPage() {
               </span>
             </div>
           </form>
-        </section>
+        </HoverCard>
 
-        <aside
-          className="lg:col-span-4 rounded-lg border border-border bg-white shadow-xs overflow-hidden"
-          aria-label="Assessment overview"
-        >
+        <HoverCard as="aside" accent="cyan" className="lg:col-span-4" ariaLabel="Assessment overview">
           <div className="px-5 py-3.5 border-b border-border">
             <h2 className="text-sm font-semibold text-slate-900">Assessment Overview</h2>
             <p className="text-xs text-slate-500">Current session status and parameters</p>
@@ -939,14 +961,11 @@ export default function DevSecOpsPage() {
               <span>Severity mentions count occurrences in report text, not verified vulnerability counts.</span>
             </p>
           </div>
-        </aside>
+        </HoverCard>
       </div>
 
       {audit && audit.status !== "idle" && (
-        <section
-          className="rounded-lg border border-border bg-white shadow-xs overflow-hidden"
-          aria-labelledby="pipeline-title"
-        >
+        <HoverCard accent="indigo" ariaLabelledBy="pipeline-title">
           <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1124,11 +1143,11 @@ export default function DevSecOpsPage() {
               </section>
             </div>
           </div>
-        </section>
+        </HoverCard>
       )}
 
       {audit?.report ? (
-        <section className="rounded-lg border border-border bg-white shadow-xs overflow-hidden">
+        <HoverCard accent="violet">
           <div className="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Assessment Report & Findings Desk</h2>
@@ -1148,21 +1167,28 @@ export default function DevSecOpsPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border bg-slate-50/40">
             {[
-              { label: "Critical", count: audit.counts?.Critical || 0, text: "text-red-700", bar: "bg-red-600" },
-              { label: "High", count: audit.counts?.High || 0, text: "text-amber-700", bar: "bg-amber-500" },
-              { label: "Medium", count: audit.counts?.Medium || 0, text: "text-blue-700", bar: "bg-blue-600" },
-              { label: "Low", count: audit.counts?.Low || 0, text: "text-slate-700", bar: "bg-slate-400" },
+              { label: "Critical", count: audit.counts?.Critical || 0, text: "text-red-700", bar: "bg-red-600", accent: "rose" as const },
+              { label: "High", count: audit.counts?.High || 0, text: "text-amber-700", bar: "bg-amber-500", accent: "amber" as const },
+              { label: "Medium", count: audit.counts?.Medium || 0, text: "text-blue-700", bar: "bg-blue-600", accent: "blue" as const },
+              { label: "Low", count: audit.counts?.Low || 0, text: "text-slate-700", bar: "bg-slate-400", accent: "indigo" as const },
             ].map((item) => (
-              <div key={item.label} className="px-5 py-3.5 space-y-1.5">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{item.label}</span>
-                  <span className={`text-lg font-semibold font-mono tabular-nums ${item.text}`}>{item.count}</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-slate-200/70 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${item.bar}`}
-                    style={{ width: `${Math.min(100, (item.count / maxRiskCount) * 100)}%` }}
-                  />
+              <div
+                key={item.label}
+                onMouseMove={handleSpotlightMove}
+                className="relative overflow-hidden group px-5 py-3.5"
+              >
+                <HoverTileOverlay accent={item.accent} />
+                <div className="relative z-10 space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{item.label}</span>
+                    <span className={`text-lg font-semibold font-mono tabular-nums ${item.text}`}>{item.count}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-slate-200/70 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${item.bar}`}
+                      style={{ width: `${Math.min(100, (item.count / maxRiskCount) * 100)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
@@ -1229,16 +1255,18 @@ export default function DevSecOpsPage() {
               </div>
             )}
           </div>
-        </section>
+        </HoverCard>
       ) : (
-        <section className="rounded-lg border border-dashed border-border bg-slate-50/40 px-6 py-10 text-center space-y-2">
-          <Lock className="w-5 h-5 text-slate-400 mx-auto" />
-          <h3 className="text-sm font-semibold text-slate-900">No Assessment Report Generated</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Configure an authorized target URL or domain above and launch an assessment to populate stage telemetry and
-            executive findings.
-          </p>
-        </section>
+        <HoverCard accent="blue" className="border-dashed bg-slate-50/40 px-6 py-10 text-center">
+          <div className="space-y-2">
+            <Lock className="w-5 h-5 text-slate-400 mx-auto" />
+            <h3 className="text-sm font-semibold text-slate-900">No Assessment Report Generated</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Configure an authorized target URL or domain above and launch an assessment to populate stage telemetry and
+              executive findings.
+            </p>
+          </div>
+        </HoverCard>
       )}
         </>
       )}
