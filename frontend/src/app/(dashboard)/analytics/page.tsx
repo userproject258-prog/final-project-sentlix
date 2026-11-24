@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, apiFetch as fetch } from "@/lib/api";
+import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/api";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
@@ -72,8 +72,9 @@ const COLORS: Record<string, string> = {
 };
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedAnalytics = getCachedData<AnalyticsData>("/api/analytics");
+  const [data, setData] = useState<AnalyticsData | null>(cachedAnalytics);
+  const [loading, setLoading] = useState(cachedAnalytics === null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export default function AnalyticsPage() {
       const res = await fetch(`${API_URL}/api/analytics`);
       if (!res.ok) throw new Error("Could not load analytics");
       const json = await res.json();
+      setCachedData("/api/analytics", json);
       setData(json);
       setError(false);
     } catch {
@@ -126,6 +128,7 @@ export default function AnalyticsPage() {
         if (!res.ok) throw new Error("Could not load analytics");
         const json = await res.json();
         if (!isCancelled) {
+          setCachedData("/api/analytics", json);
           setData(json);
           setError(false);
         }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { API_URL, WS_URL, apiFetch, websocketProtocols } from "@/lib/api";
+import { API_URL, WS_URL, apiFetch, getCachedData, setCachedData, websocketProtocols } from "@/lib/api";
 import { TrafficSimulator } from "@/components/TrafficSimulator";
 import {
   Activity,
@@ -190,7 +190,7 @@ function formatSyncTime(iso?: string): string {
 }
 
 export default function OverviewPage() {
-  const [data, setData] = useState<OverviewData | null>(null);
+  const [data, setData] = useState<OverviewData | null>(() => getCachedData<OverviewData>("/api/overview"));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [showAttackLab, setShowAttackLab] = useState(false);
@@ -220,6 +220,7 @@ export default function OverviewPage() {
       const res = await apiFetch(`${API_URL}/api/overview`);
       if (res.ok) {
         const json = await res.json();
+        setCachedData("/api/overview", json);
         setData(json);
       }
     } catch (err) {
@@ -243,6 +244,7 @@ export default function OverviewPage() {
         const res = await apiFetch(`${API_URL}/api/overview`);
         if (res.ok && !isCancelled) {
           const json = await res.json();
+          setCachedData("/api/overview", json);
           setData(json);
         }
       } catch (err) {

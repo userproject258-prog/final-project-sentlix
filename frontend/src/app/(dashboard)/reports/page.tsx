@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, apiFetch as fetch } from "@/lib/api";
+import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/api";
 
 import { useEffect, useState } from "react";
 import { FileText, Download } from "lucide-react";
@@ -14,14 +14,18 @@ interface Report {
 }
 
 export default function ReportsPage() {
-  const [reports, setReports] = useState<Report[]>([]);
+  const cachedReports = getCachedData<{ reports?: Report[] }>("/api/reports")?.reports ?? null;
+  const [reports, setReports] = useState<Report[]>(Array.isArray(cachedReports) ? cachedReports : []);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!Array.isArray(cachedReports));
 
   useEffect(() => {
     fetch(`${API_URL}/api/reports`)
       .then(res => { if (!res.ok) throw new Error("Could not load reports"); return res.json(); })
-      .then(data => setReports(data.reports))
+      .then(data => {
+        setCachedData("/api/reports", data);
+        setReports(data.reports);
+      })
       .catch(() => setError("Could not load reports. Check the backend connection."))
       .finally(() => setLoading(false));
   }, []);

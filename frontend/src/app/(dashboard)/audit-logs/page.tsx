@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Download, History, RefreshCw, Search, ShieldAlert, X } from "lucide-react";
-import { API_URL, apiFetch } from "@/lib/api";
+import { API_URL, apiFetch, getCachedData, setCachedData } from "@/lib/api";
 
 interface AuditLog {
   id: number;
@@ -21,10 +21,11 @@ function csvCell(value: string | number) {
 }
 
 export default function AuditLogsPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const cachedLogs = getCachedData<{ logs?: AuditLog[] }>("/api/audit-logs")?.logs ?? null;
+  const [logs, setLogs] = useState<AuditLog[]>(Array.isArray(cachedLogs) ? cachedLogs : []);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!Array.isArray(cachedLogs));
   const [error, setError] = useState("");
 
   const loadLogs = useCallback((signal?: AbortSignal) => {
@@ -35,7 +36,10 @@ export default function AuditLogsPage() {
       })
       .then((data) => {
         if (!Array.isArray(data.logs)) throw new Error("The server returned an invalid response.");
-        if (!signal?.aborted) setLogs(data.logs);
+        if (!signal?.aborted) {
+          setCachedData("/api/audit-logs", data);
+          setLogs(data.logs);
+        }
       })
       .catch((err) => {
         if (!signal?.aborted) setError(err instanceof Error ? err.message : "Unable to load audit logs.");

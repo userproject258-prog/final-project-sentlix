@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, apiFetch as fetch } from "@/lib/api";
+import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/api";
 
 import { useEffect, useState } from "react";
 import { Activity, Cpu, HardDrive, Network, Server, Zap } from "lucide-react";
@@ -32,11 +32,12 @@ interface SystemHealth {
 }
 
 export default function MonitoringPage() {
-  const [metrics, setMetrics] = useState<SystemMetric[]>([]);
-  const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [metrics, setMetrics] = useState<SystemMetric[]>(() => getCachedData<SystemMetric[]>("/api/monitoring/metrics") ?? []);
+  const [health, setHealth] = useState<SystemHealth | null>(() => getCachedData<SystemHealth>("/api/monitoring/health"));
 
   useEffect(() => {
     const fetchData = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       fetch(`${API_URL}/api/monitoring/metrics`)
         .then((res) => res.json())
         .then((data) => {
@@ -45,18 +46,22 @@ export default function MonitoringPage() {
             ...m,
             timeLabel: new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           }));
+          setCachedData("/api/monitoring/metrics", formatted);
           setMetrics(formatted);
         })
         .catch(console.error);
 
       fetch(`${API_URL}/api/monitoring/health`)
         .then((res) => res.json())
-        .then((data) => setHealth(data))
+        .then((data) => {
+          setCachedData("/api/monitoring/health", data);
+          setHealth(data);
+        })
         .catch(console.error);
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 5000); // Poll every 5s for the live effect
+    const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
   }, []);
 

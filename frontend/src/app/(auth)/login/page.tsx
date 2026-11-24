@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { API_URL } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { API_URL, clearApiCache, prefetchEndpoint } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +11,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    router.prefetch("/overview");
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,10 +34,12 @@ export default function LoginPage() {
         throw new Error(data.detail || "Invalid login credentials");
       }
 
-      // Store authenticated session
+      // Store authenticated session and warm initial dashboard payload in parallel with navigation
       if (typeof window !== "undefined") {
+        clearApiCache();
         localStorage.setItem("sentinelx_token", data.token);
         localStorage.setItem("sentinelx_user", JSON.stringify(data.user));
+        void prefetchEndpoint("/api/overview");
       }
 
       router.push("/overview");

@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, WS_URL, apiFetch as fetch, websocketProtocols } from "@/lib/api";
+import { API_URL, WS_URL, apiFetch as fetch, getCachedData, setCachedData, websocketProtocols } from "@/lib/api";
 
 import { useEffect, useState, useRef } from "react";
 import { Bell, CheckCircle, Clock, Radio, ShieldAlert } from "lucide-react";
@@ -16,8 +16,9 @@ interface AlertData {
 }
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedAlerts = getCachedData<{ alerts?: AlertData[] }>("/api/alerts")?.alerts ?? null;
+  const [alerts, setAlerts] = useState<AlertData[]>(Array.isArray(cachedAlerts) ? cachedAlerts : []);
+  const [loading, setLoading] = useState(!Array.isArray(cachedAlerts));
   const [error, setError] = useState("");
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -28,6 +29,7 @@ export default function AlertsPage() {
     fetch(`${API_URL}/api/alerts`)
       .then((res) => { if (!res.ok) throw new Error("Could not load alerts"); return res.json(); })
       .then((data) => {
+        setCachedData("/api/alerts", data);
         setAlerts(data.alerts);
         setError("");
         setLoading(false);

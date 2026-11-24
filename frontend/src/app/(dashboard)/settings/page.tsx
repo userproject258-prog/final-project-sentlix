@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { API_URL, apiFetch as fetch } from "@/lib/api";
+import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/api";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   Activity,
@@ -353,6 +353,7 @@ export default function SettingsPage() {
       const res = await fetch(`${API_URL}/api/settings`);
       if (res.ok) {
         const data = await res.json();
+        setCachedData("/api/settings", data);
         applySettingsPayload(data);
         showToast("Control plane telemetry refreshed.", "info");
       }
@@ -368,6 +369,12 @@ export default function SettingsPage() {
     let isCancelled = false;
 
     const loadInitial = async () => {
+      const cached = getCachedData<Record<string, unknown>>("/api/settings");
+      if (cached && !isCancelled) {
+        applySettingsPayload(cached);
+        setLoading(false);
+      }
+
       try {
         if (typeof window !== "undefined") {
           const savedTokens = localStorage.getItem(TOKENS_STORAGE_KEY);
@@ -388,6 +395,7 @@ export default function SettingsPage() {
         const res = await fetch(`${API_URL}/api/settings`);
         if (!isCancelled && res.ok) {
           const data = await res.json();
+          setCachedData("/api/settings", data);
           applySettingsPayload(data);
         }
       } catch (err) {
@@ -477,7 +485,7 @@ export default function SettingsPage() {
   const handleVerifyAiConnection = async () => {
     setTestingAiKey(true);
     try {
-      const res = await fetch(`${API_URL}/api/assistant/status`);
+      const res = await fetch(`${API_URL}/api/assistant/status?force=true`);
       const data = await res.json();
       const isOk = !!data.gemini_api_key_configured;
       const providerName = typeof data.provider === "string" ? data.provider : isOk ? "AI Engine" : "Local Summary Mode";

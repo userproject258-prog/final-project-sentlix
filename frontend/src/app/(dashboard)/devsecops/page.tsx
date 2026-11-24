@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import { API_URL, apiFetch as fetch } from "@/lib/api";
+import { useEffect, useState, useCallback } from "react";
+import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/api";
 import MarkdownReport, { stripEmojis, normalizeMarkdownText } from "@/components/MarkdownReport";
 import { AuditObservations, type AuditFinding } from "@/components/AuditObservations";
 import { PipelineChecks, type ManualPipelineStatus, type PipelineRun } from "@/components/PipelineChecks";
@@ -143,17 +143,22 @@ function parseReportSections(text: string) {
 }
 
 export default function DevSecOpsPage() {
-  const [audit, setAudit] = useState<AuditState | null>(null);
-  const [findings, setFindings] = useState<AuditFinding[]>([]);
-  const [findingsLoading, setFindingsLoading] = useState(true);
+  const cachedAudit = getCachedData<AuditState>("/api/devsecops/audit/status");
+  const cachedFindings = getCachedData<AuditFinding[]>("/api/devsecops/findings");
+  const cachedRuns = getCachedData<PipelineRun[]>("/api/devsecops/runs");
+  const cachedManual = getCachedData<ManualPipelineStatus>("/api/devsecops/runs/manual/status");
+
+  const [audit, setAudit] = useState<AuditState | null>(cachedAudit);
+  const [findings, setFindings] = useState<AuditFinding[]>(cachedFindings ?? []);
+  const [findingsLoading, setFindingsLoading] = useState(cachedFindings === null);
   const [findingsError, setFindingsError] = useState(false);
-  const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
-  const [pipelineLoading, setPipelineLoading] = useState(true);
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>(cachedRuns ?? []);
+  const [pipelineLoading, setPipelineLoading] = useState(cachedRuns === null);
   const [pipelineError, setPipelineError] = useState(false);
-  const [manualPipelineStatus, setManualPipelineStatus] = useState<ManualPipelineStatus | null>(null);
+  const [manualPipelineStatus, setManualPipelineStatus] = useState<ManualPipelineStatus | null>(cachedManual);
   const [manualPipelineError, setManualPipelineError] = useState(false);
 
-  const [target, setTarget] = useState("");
+  const [target, setTarget] = useState(cachedAudit?.target ?? "");
   const [authorized, setAuthorized] = useState(false);
   const [mode, setMode] = useState<"guided" | "all">("guided");
   const [scanDepth, setScanDepth] = useState<"standard" | "deep" | "aggressive">("deep");
@@ -164,69 +169,103 @@ export default function DevSecOpsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("Overview");
   const [notice, setNotice] = useState<{ type: "error" | "info"; text: string } | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/devsecops/audit/status`);
-      if (!res.ok) throw new Error("Audit status unavailable");
-      const data = await res.json();
-      setAudit(data);
-      setConnectionError(false);
-      if (data.target) {
-        setTarget((prev) => (prev ? prev : data.target));
+    const loadAudit = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/devsecops/audit/status`);
+        if (!res.ok) throw new Error("Audit status unavailable");
+        const data = (await res.json()) as AuditState;
+        setAudit(data);
+        setCachedData("/api/devsecops/audit/status", data);
+        setConnectionError(false);
+        if (data.target) {
+          setTarget((prev) => (prev ? prev : data.target));
+        }
+        return data.status === "running" || data.status === "queued";
+      } catch (err) {
+        console.error("Failed to fetch audit status:", err);
+        setConnectionError(true);
+        return false;
       }
-    } catch (err) {
-      console.error("Failed to fetch audit status:", err);
-      setConnectionError(true);
-    }
-    try {
-      const response = await fetch(`${API_URL}/api/devsecops/findings`);
-      if (!response.ok) throw new Error("Audit observations unavailable");
-      const data = await response.json();
-      if (!Array.isArray(data.findings)) throw new Error("Invalid observations response");
-      setFindings(data.findings);
-      setFindingsError(false);
-    } catch (err) {
-      console.error("Failed to fetch audit findings:", err);
-      setFindingsError(true);
-    } finally {
-      setFindingsLoading(false);
-    }
-    try {
-      const response = await fetch(`${API_URL}/api/devsecops/runs`);
-      if (!response.ok) throw new Error("Pipeline runs unavailable");
-      const data = await response.json();
-      if (!Array.isArray(data.runs)) throw new Error("Invalid pipeline runs response");
-      setPipelineRuns(data.runs);
-      setPipelineError(false);
-    } catch (err) {
-      console.error("Failed to fetch pipeline runs:", err);
-      setPipelineError(true);
-    } finally {
-      setPipelineLoading(false);
-    }
-    try {
-      const response = await fetch(`${API_URL}/api/devsecops/runs/manual/status`);
-      if (!response.ok) throw new Error("Manual scan status unavailable");
-      setManualPipelineStatus(await response.json());
-      setManualPipelineError(false);
-    } catch (err) {
-      console.error("Failed to fetch manual pipeline status:", err);
-      setManualPipelineError(true);
-    }
+    };
+
+    const loadFindings = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/devsecops/findings`);
+        if (!response.ok) throw new Error("Audit observations unavailable");
+        const data = await response.json();
+        if (!Array.isArray(data.findings)) throw new Error("Invalid observations response");
+        setFindings(data.findings);
+        setCachedData("/api/devsecops/findings", data.findings);
+        setFindingsError(false);
+      } catch (err) {
+        console.error("Failed to fetch audit findings:", err);
+        setFindingsError(true);
+      } finally {
+        setFindingsLoading(false);
+      }
+    };
+
+    const loadRuns = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/devsecops/runs`);
+        if (!response.ok) throw new Error("Pipeline runs unavailable");
+        const data = await response.json();
+        if (!Array.isArray(data.runs)) throw new Error("Invalid pipeline runs response");
+        setPipelineRuns(data.runs);
+        setCachedData("/api/devsecops/runs", data.runs);
+        setPipelineError(false);
+      } catch (err) {
+        console.error("Failed to fetch pipeline runs:", err);
+        setPipelineError(true);
+      } finally {
+        setPipelineLoading(false);
+      }
+    };
+
+    const loadManualStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/devsecops/runs/manual/status`);
+        if (!response.ok) throw new Error("Manual scan status unavailable");
+        const data = (await response.json()) as ManualPipelineStatus;
+        setManualPipelineStatus(data);
+        setCachedData("/api/devsecops/runs/manual/status", data);
+        setManualPipelineError(false);
+        return data.status === "running";
+      } catch (err) {
+        console.error("Failed to fetch manual pipeline status:", err);
+        setManualPipelineError(true);
+        return false;
+      }
+    };
+
+    await Promise.all([
+      loadAudit(),
+      loadManualStatus(),
+      loadFindings(),
+      loadRuns(),
+    ]);
   }, []);
 
+  const isActiveWork =
+    audit?.status === "running" ||
+    audit?.status === "queued" ||
+    manualPipelineStatus?.status === "running";
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void fetchStatus();
-    }, 0);
-    pollIntervalRef.current = setInterval(() => void fetchStatus(), 2000);
-    return () => {
-      clearTimeout(timer);
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    };
+    void fetchStatus();
   }, [fetchStatus]);
+
+  useEffect(() => {
+    const delayMs = isActiveWork ? 2500 : 30000;
+    const interval = setInterval(() => {
+      if (typeof document === "undefined" || !document.hidden) {
+        void fetchStatus();
+      }
+    }, delayMs);
+    return () => clearInterval(interval);
+  }, [fetchStatus, isActiveWork]);
 
   const handleManualRefresh = async () => {
     setRefreshing(true);

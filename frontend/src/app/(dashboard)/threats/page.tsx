@@ -1,6 +1,6 @@
 "use client";
 
-import { API_URL, apiFetch as fetch } from "@/lib/api";
+import { API_URL, apiFetch as fetch, getCachedData, setCachedData } from "@/lib/api";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { TrafficSimulator } from "@/components/TrafficSimulator";
@@ -62,10 +62,12 @@ interface ThreatData {
 }
 
 export default function ThreatDetectionPage() {
-  const [threats, setThreats] = useState<ThreatData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedThreats = getCachedData<ThreatData[]>("/api/threats");
+  const cachedModel = getCachedData<ThreatModelTelemetry>("/api/threats/model");
+  const [threats, setThreats] = useState<ThreatData[]>(cachedThreats ?? []);
+  const [loading, setLoading] = useState(cachedThreats === null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [modelTelemetry, setModelTelemetry] = useState<ThreatModelTelemetry | null>(null);
+  const [modelTelemetry, setModelTelemetry] = useState<ThreatModelTelemetry | null>(cachedModel);
   const [showModelDetails, setShowModelDetails] = useState(true);
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
   const [updatingThreatId, setUpdatingThreatId] = useState<string | null>(null);
@@ -96,6 +98,7 @@ export default function ThreatDetectionPage() {
       const res = await fetch(`${API_URL}/api/threats`);
       if (!res.ok) throw new Error("Threats endpoint unavailable");
       const data = await res.json();
+      setCachedData("/api/threats", data);
       setThreats(data);
     } catch (error) {
       console.error("Failed to fetch threats:", error);
@@ -122,11 +125,14 @@ export default function ThreatDetectionPage() {
 
         if (threatsRes.ok && !isCancelled) {
           const threatsJson = await threatsRes.json();
+          setCachedData("/api/threats", threatsJson);
           setThreats(threatsJson);
         }
 
         if (modelRes.ok && !isCancelled) {
-          setModelTelemetry(await modelRes.json());
+          const modelJson = await modelRes.json();
+          setCachedData("/api/threats/model", modelJson);
+          setModelTelemetry(modelJson);
         }
       } catch (err) {
         console.error("Initial data load error:", err);

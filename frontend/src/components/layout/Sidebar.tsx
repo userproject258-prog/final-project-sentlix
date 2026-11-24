@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getCachedData, prefetchEndpoint } from "@/lib/api";
 import {
   ShieldAlert,
   Activity,
@@ -77,12 +78,30 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+const ROUTE_PREFETCH_API: Record<string, string> = {
+  "/overview": "/api/overview",
+  "/threats": "/api/threats",
+  "/alerts": "/api/alerts",
+  "/analytics": "/api/analytics",
+  "/reports": "/api/reports",
+  "/audit-logs": "/api/audit-logs",
+  "/settings": "/api/settings",
+};
+
 function NavItem({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(`${href}/`);
+  const handlePrefetch = () => {
+    const endpoint = ROUTE_PREFETCH_API[href];
+    if (endpoint && !getCachedData(endpoint)) {
+      void prefetchEndpoint(endpoint);
+    }
+  };
   return (
     <Link
       href={href}
+      onMouseEnter={handlePrefetch}
+      onFocus={handlePrefetch}
       aria-current={active ? "page" : undefined}
       className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary ${active ? "bg-primary/10 text-primary" : "hover:bg-sidebar-foreground/10"}`}
     >

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlmodel import Session, select
 from app.database import get_session, init_db
 from app.models.core import SystemStats, ThreatEvent, AuditFinding, AuditLog
@@ -78,13 +79,19 @@ def create_auth_session(session: Session, user_id: int) -> str:
     return token
 
 def authenticated_user(token: str, session: Session) -> User | None:
-    record = session.get(AuthSession, hashlib.sha256(token.encode()).hexdigest())
-    if record is None:
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    row = session.exec(
+        select(AuthSession, User)
+        .join(User, AuthSession.user_id == User.id)
+        .where(AuthSession.token_hash == token_hash)
+    ).first()
+    if row is None:
         return None
+    record, user = row
     expiry = record.expires_at.replace(tzinfo=timezone.utc) if record.expires_at.tzinfo is None else record.expires_at
     if expiry <= datetime.now(timezone.utc):
         return None
-    return session.get(User, record.user_id)
+    return user
 
 async def authenticate_request(request, call_next):
     if (not request.url.path.startswith("/api/") or request.method == "OPTIONS" or
@@ -135,8 +142,9 @@ async def require_authentication(request: Request, call_next):
             import logging
             logging.getLogger(__name__).exception("Could not record API activity")
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
-                   allow_methods=["*"], allow_headers=["*"])
+                   allow_methods=["*"], allow_headers=["*"], max_age=86400)
 
 from pydantic import BaseModel, EmailStr, Field
 from typing import Literal
@@ -164,10 +172,11 @@ async def register(req: RegisterRequest, session: Session = Depends(get_session)
     if session.exec(select(User.id).limit(1)).first() is not None:
         raise HTTPException(status_code=403, detail="Self-registration is closed after the first account is created")
     
+    hashed = await asyncio.to_thread(hash_password, req.password)
     new_user = User(
         name=req.name.strip() or "Security Analyst",
         email=clean_email,
-        hashed_password=hash_password(req.password)
+        hashed_password=hashed,
     )
     session.add(new_user)
     session.commit()
@@ -190,10 +199,10 @@ async def register(req: RegisterRequest, session: Session = Depends(get_session)
 async def login(req: LoginRequest, session: Session = Depends(get_session)):
     clean_email = req.email.strip().lower()
     user = session.exec(select(User).where(User.email == clean_email)).first()
-    if not user or not verify_password(req.password, user.hashed_password):
+    if not user or not await asyncio.to_thread(verify_password, req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.hashed_password.startswith("pbkdf2_sha256$"):
-        user.hashed_password = hash_password(req.password)
+        user.hashed_password = await asyncio.to_thread(hash_password, req.password)
         session.add(user)
         session.commit()
     token = create_auth_session(session, user.id)
@@ -1068,8 +1077,8 @@ def ask_assistant(query: AssistantQuery, session: Session = Depends(get_session)
     return result
 
 @app.get("/api/assistant/status")
-def assistant_status():
-    status = get_active_provider_status()
+def assistant_status(force: bool = False):
+    status = get_active_provider_status(force=force)
     return {
         "gemini_api_key_configured": status["configured"],
         "key_present": status["key_present"],
@@ -1196,7 +1205,7 @@ def get_settings(request: Request, session: Session = Depends(get_session)):
 @app.post("/api/settings/ai-key")
 def update_ai_key(req: AIKeyUpdateRequest):
     clean_key = set_runtime_api_key(req.api_key)
-    is_valid = validate_gemini_api_key(clean_key)
+    is_valid = validate_gemini_api_key(clean_key, force=True)
     provider = detect_key_provider(clean_key)
     status = get_active_provider_status()
     return {

@@ -1,10 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Loader2 } from "lucide-react";
 import { API_URL, apiFetch } from "@/lib/api";
+
+function subscribeToken(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+function getClientHasToken(): boolean {
+  try {
+    return Boolean(localStorage.getItem("sentinelx_token"));
+  } catch {
+    return false;
+  }
+}
+
+function getServerHasToken(): boolean {
+  return false;
+}
 
 export default function DashboardLayout({
   children,
@@ -12,38 +29,29 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const hasToken = useSyncExternalStore(subscribeToken, getClientHasToken, getServerHasToken);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem("sentinelx_token");
-      if (!token) {
-        setIsAuthenticated(false);
-        router.replace("/login");
-      } else {
-        try {
-          const response = await apiFetch(`${API_URL}/api/auth/me`);
-          setIsAuthenticated(response.ok);
-        } catch {
-          setIsAuthenticated(false);
-        }
-      }
-    };
+    if (!hasToken) {
+      router.replace("/login");
+      return;
+    }
 
-    checkAuth();
-    window.addEventListener("storage", checkAuth);
-    return () => window.removeEventListener("storage", checkAuth);
-  }, [router]);
+    // Validate session in the background without blocking dashboard rendering or initial data fetch.
+    // If the session is invalid/expired, apiFetch clears localStorage and redirects to /login on 401.
+    void apiFetch(`${API_URL}/api/auth/me`).catch(() => {
+      // Offline / transient network errors shouldn't trap the user behind a permanent spinner
+    });
+  }, [hasToken, router]);
 
-  if (isAuthenticated === null || !isAuthenticated) {
+  if (!hasToken) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-background text-foreground gap-3">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        <p className="text-sm text-muted font-medium">Verifying SentinelX Session...</p>
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+        <p className="text-xs text-muted font-medium">Redirecting to sign in...</p>
       </div>
     );
   }
 
   return <AppShell>{children}</AppShell>;
 }
-
