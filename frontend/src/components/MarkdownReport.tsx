@@ -36,6 +36,7 @@ export function stripEmojis(str: string): string {
 export function normalizeMarkdownText(raw: string): string {
   if (!raw) return "";
   const text = stripEmojis(raw)
+    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/\\r\\n/g, "\n")
     .replace(/\\n/g, "\n")
     .replace(/\\r/g, "\n")

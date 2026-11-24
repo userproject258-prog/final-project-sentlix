@@ -8,7 +8,6 @@ MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(MODEL_DIR, "threat_model.pkl")
 ENCODER_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
 
-# Initialize globally
 clf = None
 le = None
 
@@ -36,14 +35,10 @@ def analyze_event(event_data: dict) -> dict:
         if not load_model():
             return {"error": "Model not trained yet."}
             
-    # Expected features: packet_size, duration, failed_logins, unique_ports_accessed, bytes_sent
     features = ['packet_size', 'duration', 'failed_logins', 'unique_ports_accessed', 'bytes_sent']
-    
-    # Fill missing with 0
     row = {f: event_data.get(f, 0) for f in features}
     df = pd.DataFrame([row])
-    
-    # Predict
+
     t0 = time.perf_counter()
     pred_idx = clf.predict(df)[0]
     probabilities = clf.predict_proba(df)[0]

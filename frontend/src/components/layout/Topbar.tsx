@@ -36,7 +36,7 @@ export function Topbar() {
   const userName = useSyncExternalStore(subscribeUser, getStoredUserName, getServerUserName);
 
   const handleLogout = async () => {
-    try { await apiFetch(`${API_URL}/api/auth/logout`, { method: "POST" }); } catch { /* Clear local session even if offline. */ }
+    try { await apiFetch(`${API_URL}/api/auth/logout`, { method: "POST" }); } catch { }
     clearApiCache();
     localStorage.removeItem("sentinelx_token");
     localStorage.removeItem("sentinelx_user");

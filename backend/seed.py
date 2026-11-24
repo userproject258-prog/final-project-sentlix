@@ -7,14 +7,12 @@ import uuid
 def seed():
     init_db()
     with Session(engine) as session:
-        # Check if already seeded
         if session.exec(select(SystemStats)).first():
             print("Database already seeded.")
             return
 
         print("Seeding database...")
-        
-        # Seed Stats
+
         stats = SystemStats(
             threats=142,
             critical=12,
@@ -28,8 +26,7 @@ def seed():
             cloud_trend_value="5%"
         )
         session.add(stats)
-        
-        # Seed Threat Events
+
         now = datetime.now(timezone.utc)
         events = [
             ThreatEvent(id=f"EVT-{uuid.uuid4().hex[:6].upper()}", time=now - timedelta(minutes=5), type="SQL Injection", source="45.33.12.9", destination="10.0.1.100:443", confidence=0.984, severity="CRITICAL", status="Open"),
