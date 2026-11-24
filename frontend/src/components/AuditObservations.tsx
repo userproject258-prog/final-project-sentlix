@@ -53,28 +53,36 @@ export function filterAuditFindings(findings: AuditFinding[], search: string, st
   );
 }
 
+const PAGE_SIZE = 6;
+
 export function AuditObservations({
   findings,
   loading,
   loadError,
   onRetry,
   onResolve,
+  defaultOpen = false,
 }: {
   findings: AuditFinding[];
   loading: boolean;
   loadError: boolean;
   onRetry: () => void;
   onResolve: (finding: AuditFinding) => Promise<number>;
+  defaultOpen?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [severity, setSeverity] = useState("All");
+  const [page, setPage] = useState(1);
   const [resolving, setResolving] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string; findingId: string } | null>(null);
 
   const openCount = findings.filter((finding) => finding.status === "Open").length;
   const resolvedCount = findings.filter((finding) => finding.status === "Resolved").length;
   const filtered = filterAuditFindings(findings, search, status, severity);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleFindings = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   async function handleResolve(finding: AuditFinding) {
     setResolving(finding.id);
@@ -98,7 +106,7 @@ export function AuditObservations({
   }
 
   return (
-    <details className="group/obs rounded-lg border border-border bg-white shadow-xs overflow-hidden">
+    <details open={defaultOpen || undefined} className="group/obs rounded-lg border border-border bg-white shadow-xs overflow-hidden">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50/70 transition-colors marker:content-none [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-3 min-w-0">
           <ClipboardList className="h-4 w-4 shrink-0 text-slate-600" />
@@ -178,7 +186,10 @@ export function AuditObservations({
             <input
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search findings, targets or evidence"
               className="w-full rounded-md border border-border bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-blue-500 transition-colors"
             />
@@ -187,7 +198,10 @@ export function AuditObservations({
             <span className="sr-only">Filter by status</span>
             <select
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
               className="w-full rounded-md border border-border bg-white px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500 transition-colors"
             >
               <option value="All">All statuses</option>
@@ -199,7 +213,10 @@ export function AuditObservations({
             <span className="sr-only">Filter by severity</span>
             <select
               value={severity}
-              onChange={(event) => setSeverity(event.target.value)}
+              onChange={(event) => {
+                setSeverity(event.target.value);
+                setPage(1);
+              }}
               className="w-full rounded-md border border-border bg-white px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500 transition-colors"
             >
               <option value="All">All severities</option>
@@ -236,10 +253,35 @@ export function AuditObservations({
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">
-              Showing {filtered.length} of {findings.length} recorded observations
-            </p>
-            {filtered.map((finding) => {
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-500">
+                Showing {visibleFindings.length} of {filtered.length} matching observations ({findings.length} recorded)
+              </p>
+              {totalPages > 1 && (
+                <div className="inline-flex items-center gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="rounded-md border border-border bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-2 font-mono text-[11px] text-slate-600 tabular-nums">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="rounded-md border border-border bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+            {visibleFindings.map((finding) => {
               const resolved = finding.status === "Resolved";
               return (
                 <article key={finding.id} className="overflow-hidden rounded-md border border-border bg-white">

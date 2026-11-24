@@ -167,6 +167,7 @@ export default function DevSecOpsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [workspaceTab, setWorkspaceTab] = useState<"assessment" | "observations" | "pipeline">("assessment");
   const [activeTab, setActiveTab] = useState<string>("Overview");
   const [notice, setNotice] = useState<{ type: "error" | "info"; text: string } | null>(null);
 
@@ -556,7 +557,11 @@ export default function DevSecOpsPage() {
         aria-label="Assessment summary metrics"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-white shadow-xs overflow-hidden"
       >
-        <div className="p-4 flex flex-col justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setWorkspaceTab("assessment")}
+          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
+        >
           <span className="text-xs font-medium text-slate-500">Stage Progress</span>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
@@ -567,9 +572,13 @@ export default function DevSecOpsPage() {
           <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${stagePct}%` }} />
           </div>
-        </div>
+        </button>
 
-        <div className="p-4 flex flex-col justify-between gap-1.5">
+        <button
+          type="button"
+          onClick={() => setWorkspaceTab("observations")}
+          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-1.5"
+        >
           <span className="text-xs font-medium text-slate-500">Audit Observations</span>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
@@ -580,9 +589,13 @@ export default function DevSecOpsPage() {
             </span>
           </div>
           <span className="text-[11px] text-slate-500">Open evidence items across runs</span>
-        </div>
+        </button>
 
-        <div className="p-4 flex flex-col justify-between gap-1.5">
+        <button
+          type="button"
+          onClick={() => setWorkspaceTab("pipeline")}
+          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-1.5"
+        >
           <span className="text-xs font-medium text-slate-500">Pipeline Checks</span>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-xl font-semibold font-mono tabular-nums text-slate-900">
@@ -591,9 +604,13 @@ export default function DevSecOpsPage() {
             <span className="text-[11px] font-mono text-emerald-700">passed</span>
           </div>
           <span className="text-[11px] text-slate-500">SAST, secrets, dependencies, config</span>
-        </div>
+        </button>
 
-        <div className="p-4 flex flex-col justify-between gap-1.5">
+        <button
+          type="button"
+          onClick={() => setWorkspaceTab("assessment")}
+          className="p-4 text-left hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-1.5"
+        >
           <span className="text-xs font-medium text-slate-500">Report Severity Mentions</span>
           <div className="flex items-baseline gap-2 font-mono text-sm font-semibold tabular-nums">
             <span className="text-red-600">{audit?.counts?.Critical ?? 0}C</span>
@@ -605,9 +622,41 @@ export default function DevSecOpsPage() {
             <span className="text-slate-600">{audit?.counts?.Low ?? 0}L</span>
           </div>
           <span className="text-[11px] text-slate-500">Text mentions, not verified counts</span>
-        </div>
+        </button>
       </section>
 
+      {/* Workspace Section Tabs — Keeps Each View Compact Without Excessive Vertical Scrolling */}
+      <nav aria-label="Assessment workspace sections" className="border-b border-border flex items-center gap-1 overflow-x-auto">
+        {[
+          { id: "assessment" as const, label: "Assessment & Report", count: null },
+          { id: "observations" as const, label: "Audit Observations", count: findingsLoading ? null : findings.length },
+          { id: "pipeline" as const, label: "Pipeline Security Checks", count: pipelineLoading ? null : pipelineRuns.length },
+        ].map((tab) => {
+          const active = workspaceTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setWorkspaceTab(tab.id)}
+              className={`inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
+                active
+                  ? "border-blue-600 text-slate-900 font-semibold"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.count !== null && (
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-600 tabular-nums">
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {workspaceTab === "assessment" && (
+        <>
       {/* Assessment Configuration (8 cols) & Current Session Overview (4 cols) */}
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
         <section className="lg:col-span-8 rounded-lg border border-border bg-white shadow-xs overflow-hidden">
@@ -1210,25 +1259,32 @@ export default function DevSecOpsPage() {
           </p>
         </section>
       )}
+        </>
+      )}
 
-      {/* Recorded Observations & Local Pipeline Checks */}
-      <AuditObservations
-        findings={findings}
-        loading={findingsLoading}
-        loadError={findingsError}
-        onRetry={() => void fetchStatus()}
-        onResolve={resolveFinding}
-      />
+      {workspaceTab === "observations" && (
+        <AuditObservations
+          findings={findings}
+          loading={findingsLoading}
+          loadError={findingsError}
+          onRetry={() => void fetchStatus()}
+          onResolve={resolveFinding}
+          defaultOpen
+        />
+      )}
 
-      <PipelineChecks
-        runs={pipelineRuns}
-        loading={pipelineLoading}
-        loadError={pipelineError}
-        manualStatus={manualPipelineStatus}
-        manualStatusError={manualPipelineError}
-        onRetry={() => void fetchStatus()}
-        onRun={runPipelineChecks}
-      />
+      {workspaceTab === "pipeline" && (
+        <PipelineChecks
+          runs={pipelineRuns}
+          loading={pipelineLoading}
+          loadError={pipelineError}
+          manualStatus={manualPipelineStatus}
+          manualStatusError={manualPipelineError}
+          onRetry={() => void fetchStatus()}
+          onRun={runPipelineChecks}
+          defaultOpen
+        />
+      )}
     </div>
   );
 }
