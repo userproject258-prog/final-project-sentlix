@@ -279,7 +279,7 @@ async def get_overview(session: Session = Depends(get_session)):
         session.refresh(stats)
 
     from app.models.core import CSPMFinding, Alert, PipelineRun, AuditReport, SystemMetric
-    from app.assistant.service import get_gemini_api_key
+    from app.assistant.service import get_gemini_api_key, detect_key_provider
 
     now = datetime.now(timezone.utc)
     closed_states = {"resolved", "closed", "dismissed"}
@@ -447,6 +447,8 @@ async def get_overview(session: Session = Depends(get_session)):
                        "time": _iso(latest_metric.time)}
                       if latest_metric else None)
     ai_key = get_gemini_api_key()
+    ai_provider = detect_key_provider(ai_key) if ai_key else "Local Summary Mode"
+    ai_engine = _provider_engine_label(ai_provider) if ai_key else "Local recorded-data summary"
 
     return {
         "generated_at": now.isoformat(),
@@ -477,7 +479,7 @@ async def get_overview(session: Session = Depends(get_session)):
         "audit": audit_summary,
         "pipeline": pipeline_summary,
         "system": system_summary,
-        "ai": {"configured": bool(ai_key), "engine": "Google gemini-2.5-flash" if ai_key else "Local recorded-data summary"},
+        "ai": {"configured": bool(ai_key), "provider": ai_provider, "engine": ai_engine},
         "recent_events": [
             {
                 "id": evt.id,

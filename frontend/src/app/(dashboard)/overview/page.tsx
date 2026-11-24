@@ -5,44 +5,29 @@ import Link from "next/link";
 import { API_URL, WS_URL, apiFetch, websocketProtocols } from "@/lib/api";
 import { TrafficSimulator } from "@/components/TrafficSimulator";
 import {
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  AlertTriangle,
   Activity,
-  Cloud,
-  RefreshCw,
-  Radio,
-  Loader2,
   ArrowUpRight,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Search,
-  CheckCircle2,
-  AlertCircle,
-  Bot,
-  Sparkles,
-  Cpu,
-  GitBranch,
-  X,
   Check,
-  Server,
-  Wrench,
-  Copy,
+  CheckCircle2,
   ChevronRight,
-  Clock,
+  Copy,
+  FlaskConical,
+  Loader2,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X,
 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  AreaChart,
   Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 
 interface OverviewData {
@@ -142,6 +127,7 @@ interface OverviewData {
   } | null;
   ai?: {
     configured: boolean;
+    provider?: string;
     engine: string;
   };
   recent_events: {
@@ -159,10 +145,55 @@ interface OverviewData {
   risk_trend: { date: string; score: number }[];
 }
 
+function SeverityDot({ severity }: { severity: string }) {
+  const sev = (severity || "").toUpperCase();
+  const style =
+    sev === "CRITICAL"
+      ? { dot: "bg-red-600", text: "text-red-700" }
+      : sev === "HIGH"
+      ? { dot: "bg-amber-500", text: "text-amber-700" }
+      : sev === "MEDIUM"
+      ? { dot: "bg-blue-600", text: "text-blue-700" }
+      : { dot: "bg-slate-400", text: "text-slate-600" };
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${style.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
+      {sev || "INFO"}
+    </span>
+  );
+}
+
+function TrendTag({ direction, value }: { direction?: string; value?: string }) {
+  if (!value || direction === "flat") {
+    return <span className="text-[11px] font-mono text-slate-500">0 vs 7d</span>;
+  }
+  const isUp = direction === "up";
+  return (
+    <span
+      className={`text-[11px] font-mono font-medium ${
+        isUp ? "text-red-600" : "text-emerald-700"
+      }`}
+    >
+      {value} vs 7d
+    </span>
+  );
+}
+
+function formatSyncTime(iso?: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const [showAttackLab, setShowAttackLab] = useState(false);
   const [lastNotification, setLastNotification] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [updatingThreatId, setUpdatingThreatId] = useState<string | null>(null);
@@ -176,6 +207,13 @@ export default function OverviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  const showFeedback = useCallback((msg: string) => {
+    setActionFeedback(msg);
+    setTimeout(() => {
+      setActionFeedback((current) => (current === msg ? null : current));
+    }, 4000);
+  }, []);
 
   const fetchOverview = useCallback(async () => {
     try {
@@ -193,17 +231,9 @@ export default function OverviewPage() {
     setIsRefreshing(true);
     await fetchOverview();
     setIsRefreshing(false);
-    showFeedback("Telemetry refreshed from SentinelX security engine");
+    showFeedback("Telemetry synchronized.");
   };
 
-  const showFeedback = (msg: string) => {
-    setActionFeedback(msg);
-    setTimeout(() => {
-      setActionFeedback((current) => (current === msg ? null : current));
-    }, 4000);
-  };
-
-  // WebSocket Live Updates
   useEffect(() => {
     let isCancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -243,12 +273,14 @@ export default function OverviewPage() {
               msg.type === "THREAT_STATUS_UPDATED"
             ) {
               if (msg.type === "NEW_THREAT") {
-                setLastNotification(`🚨 Detected: ${msg.threat?.type || "Attack"} from ${msg.threat?.source || "External IP"}`);
+                setLastNotification(
+                  `New event detected: ${msg.threat?.type || "Anomaly"} from ${msg.threat?.source || "external source"}`
+                );
               }
-              fetchOverview();
+              void fetchOverview();
             }
           } catch {
-            // Ignore malformed WS packets
+            // Ignore malformed WS payloads
           }
         };
 
@@ -268,8 +300,7 @@ export default function OverviewPage() {
     };
 
     connectWs();
-
-    const interval = setInterval(fetchOverview, 10000);
+    const interval = setInterval(() => void fetchOverview(), 10000);
 
     return () => {
       isCancelled = true;
@@ -279,7 +310,6 @@ export default function OverviewPage() {
     };
   }, [fetchOverview]);
 
-  // Inline threat status update
   const handleUpdateThreatStatus = async (threatId: string, newStatus: "Open" | "Investigating" | "Resolved") => {
     setUpdatingThreatId(threatId);
     try {
@@ -290,7 +320,6 @@ export default function OverviewPage() {
       });
       if (!res.ok) throw new Error("Failed to update status");
 
-      // Optimistic local update
       setData((prev) => {
         if (!prev) return prev;
         return {
@@ -301,16 +330,15 @@ export default function OverviewPage() {
         };
       });
 
-      showFeedback(`Threat ${threatId} status marked as ${newStatus}`);
-      fetchOverview();
+      showFeedback(`Incident ${threatId} updated to ${newStatus}.`);
+      void fetchOverview();
     } catch {
-      showFeedback(`Failed to update threat ${threatId}.`);
+      showFeedback(`Unable to update incident ${threatId}.`);
     } finally {
       setUpdatingThreatId(null);
     }
   };
 
-  // Inline alert resolution
   const handleResolveAlert = async (alertId: string, alertTitle: string) => {
     setResolvingAlertId(alertId);
     try {
@@ -331,16 +359,15 @@ export default function OverviewPage() {
         };
       });
 
-      showFeedback(`Alert "${alertTitle}" resolved successfully.`);
-      fetchOverview();
+      showFeedback(`Resolved alert: ${alertTitle}`);
+      void fetchOverview();
     } catch {
-      showFeedback(`Failed to resolve alert ${alertId}.`);
+      showFeedback(`Unable to resolve alert ${alertId}.`);
     } finally {
       setResolvingAlertId(null);
     }
   };
 
-  // Inline CSPM Remediation
   const handleRemediateCspm = async (findingId: string, resource: string) => {
     setRemediatingCspmId(findingId);
     try {
@@ -351,27 +378,24 @@ export default function OverviewPage() {
       });
       if (!res.ok) throw new Error("Remediation failed");
 
-      showFeedback(`Cloud security policy enforced for ${resource}.`);
-      fetchOverview();
+      showFeedback(`Policy enforced on ${resource}.`);
+      void fetchOverview();
     } catch {
-      showFeedback(`Failed to remediate ${resource}.`);
+      showFeedback(`Unable to enforce policy on ${resource}.`);
     } finally {
       setRemediatingCspmId(null);
     }
   };
 
-  // Trigger Cloud Posture Scan
   const handleRunCspmScan = async () => {
     setScanningCspm(true);
     try {
-      const res = await apiFetch(`${API_URL}/api/cspm/scan`, {
-        method: "POST",
-      });
+      const res = await apiFetch(`${API_URL}/api/cspm/scan`, { method: "POST" });
       if (!res.ok) throw new Error("Scan failed");
-      showFeedback("Cloud infrastructure posture scan completed.");
+      showFeedback("Cloud posture scan completed.");
       await fetchOverview();
     } catch {
-      showFeedback("Could not complete cloud posture scan.");
+      showFeedback("Cloud posture scan could not complete.");
     } finally {
       setScanningCspm(false);
     }
@@ -383,36 +407,34 @@ export default function OverviewPage() {
     setTimeout(() => setCopiedIp((cur) => (cur === text ? null : cur)), 2000);
   };
 
-  const handleCardMouseMove = (e: React.MouseEvent<HTMLElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    e.currentTarget.style.setProperty("--mouse-x", `${x}px`);
-    e.currentTarget.style.setProperty("--mouse-y", `${y}px`);
-  };
+  if (!data || !data.stats) {
+    return (
+      <div className="max-w-[1440px] mx-auto py-20 flex flex-col items-center justify-center gap-2.5 text-slate-500">
+        <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+        <p className="text-sm font-medium text-slate-900">Loading security posture...</p>
+        <p className="text-xs text-slate-500">Fetching threat events, cloud posture, and system metrics.</p>
+      </div>
+    );
+  }
 
-  // Filtered recent events
-  const recentEvents = data?.recent_events ?? [];
+  const recentEvents = data.recent_events ?? [];
   const filteredEvents = recentEvents.filter((evt) => {
+    const q = searchQuery.trim().toLowerCase();
     const matchesSearch =
-      searchQuery === "" ||
-      evt.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      evt.source.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      evt.id.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesSeverity =
-      severityFilter === "ALL" || evt.severity.toUpperCase() === severityFilter;
-
-    const matchesStatus =
-      statusFilter === "ALL" || evt.status.toLowerCase() === statusFilter.toLowerCase();
-
+      q === "" ||
+      evt.type.toLowerCase().includes(q) ||
+      evt.source.toLowerCase().includes(q) ||
+      (evt.destination || "").toLowerCase().includes(q) ||
+      evt.id.toLowerCase().includes(q);
+    const matchesSeverity = severityFilter === "ALL" || evt.severity.toUpperCase() === severityFilter;
+    const matchesStatus = statusFilter === "ALL" || evt.status.toLowerCase() === statusFilter.toLowerCase();
     return matchesSearch && matchesSeverity && matchesStatus;
   });
 
   const timelineChartData =
-    data?.timeline && data.timeline.length > 0
+    data.timeline && data.timeline.length > 0
       ? data.timeline
-      : (data?.risk_trend || []).map((r) => ({
+      : (data.risk_trend || []).map((r) => ({
           date: r.date,
           label: r.date,
           critical: Math.round(r.score / 25),
@@ -422,32 +444,28 @@ export default function OverviewPage() {
           total: Math.round(r.score / 25),
         }));
 
-  if (!data || !data.stats) {
-    return (
-      <div className="p-16 text-center text-muted flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-9 h-9 text-primary animate-spin" />
-        <p className="font-semibold text-sm text-foreground">
-          Aggregating real-time SOC security posture & telemetry...
-        </p>
-        <p className="text-xs text-muted max-w-sm">
-          Connecting to SentinelX threat intelligence stream and cloud policy engines.
-        </p>
-      </div>
-    );
-  }
-
   const riskScore = data.stats.risk_score;
-  const grade = data.posture?.grade || (riskScore < 20 ? "A" : riskScore < 40 ? "B" : riskScore < 60 ? "C" : riskScore < 80 ? "D" : "F");
-  const postureLabel = data.posture?.label || (riskScore >= 70 ? "Elevated Risk" : riskScore >= 40 ? "Moderate" : "Good Posture");
+  const grade =
+    data.posture?.grade ||
+    (riskScore < 20 ? "A" : riskScore < 40 ? "B" : riskScore < 60 ? "C" : riskScore < 80 ? "D" : "F");
+  const postureLabel =
+    data.posture?.label ||
+    (riskScore >= 70 ? "Elevated Risk" : riskScore >= 40 ? "Moderate Risk" : "Good Posture");
 
-  const gradeColors: Record<string, { bg: string; text: string; border: string; bar: string }> = {
-    A: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", bar: "bg-emerald-500" },
-    B: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-300", bar: "bg-blue-500" },
-    C: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-300", bar: "bg-amber-500" },
-    D: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-300", bar: "bg-orange-500" },
-    F: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", bar: "bg-rose-600" },
+  const gradeBadgeStyle: Record<string, string> = {
+    A: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    B: "bg-blue-50 text-blue-700 border-blue-200",
+    C: "bg-amber-50 text-amber-700 border-amber-200",
+    D: "bg-orange-50 text-orange-700 border-orange-200",
+    F: "bg-red-50 text-red-700 border-red-200",
   };
-  const activeGradeTheme = gradeColors[grade] || gradeColors.C;
+  const gradeBarStyle: Record<string, string> = {
+    A: "bg-emerald-600",
+    B: "bg-blue-600",
+    C: "bg-amber-500",
+    D: "bg-orange-500",
+    F: "bg-red-600",
+  };
 
   const totalRuns = data.pipeline?.total ?? 0;
   const failedRuns = data.pipeline?.failed ?? 0;
@@ -458,1238 +476,707 @@ export default function OverviewPage() {
   const effectivePassRate =
     totalRuns > 0 ? Math.round((effectivePassedRuns * 100) / totalRuns) : data.stats.pipeline_pass_rate ?? 100;
 
+  const latestPipeline = data.pipeline?.recent?.[0] ?? null;
+  const totalVectors = data.threat_distribution.reduce((acc, curr) => acc + curr.count, 0);
+  const syncedAt = formatSyncTime(data.generated_at);
+
+  const aiProviderLabel = data.ai?.configured
+    ? data.ai.provider && data.ai.provider !== "Local Summary Mode"
+      ? data.ai.provider
+      : data.ai.engine.replace("Google ", "")
+    : "Local Summary";
+
   return (
-    <div className="space-y-5 animate-fade-in pb-12">
-      {/* Dynamic Feedback Banner */}
+    <div className="max-w-[1440px] mx-auto space-y-6 pb-12">
+      {/* Page Header — Flat Enterprise Bar */}
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Security Overview</h1>
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-border px-2 py-0.5 rounded-md">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-emerald-600" : "bg-amber-500"}`}
+              />
+              {wsConnected ? "Live stream" : "Polling (10s)"}
+            </span>
+            {syncedAt && (
+              <span className="text-xs font-mono text-slate-400 tabular-nums">
+                Updated {syncedAt}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Consolidated threat detection, cloud compliance posture, DevSecOps audits, and incident triage.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowAttackLab((v) => !v)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+              showAttackLab
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-700 border-border hover:bg-slate-50 hover:border-slate-300"
+            }`}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            <span>{showAttackLab ? "Hide Attack Lab" : "Attack Lab"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-700 border border-border hover:bg-slate-50 hover:border-slate-300 rounded-md transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isRefreshing ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+
+          <Link
+            href="/devsecops"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+          >
+            <span>Run Security Audit</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </header>
+
+      {/* Operational Notice Bar */}
       {(actionFeedback || lastNotification) && (
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium animate-slide-up shadow-xs">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-            <span>{actionFeedback || lastNotification}</span>
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-md bg-slate-50 border border-border text-xs text-slate-700"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="truncate">{actionFeedback || lastNotification}</span>
           </div>
           <button
+            type="button"
             onClick={() => {
               setActionFeedback(null);
               setLastNotification(null);
             }}
-            className="p-1 text-blue-500 hover:text-blue-700 rounded transition-colors"
+            aria-label="Dismiss notification"
+            className="p-0.5 text-slate-400 hover:text-slate-700 rounded"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Top Header & Executive Controls */}
-      <div
-        onMouseMove={handleCardMouseMove}
-        className="relative overflow-hidden group flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-surface p-5 rounded-xl border border-border hover:border-blue-400/60 shadow-xs hover:shadow-lg hover:shadow-blue-500/5 hover:-translate-y-0.5 transition-all duration-300 ease-out"
+      {/* Optional On-Demand Attack Simulation Lab */}
+      {showAttackLab && (
+        <TrafficSimulator onComplete={() => void fetchOverview()} />
+      )}
+
+      {/* Row 1: Unified 5-Column Enterprise KPI Strip */}
+      <section
+        aria-label="Key security metrics"
+        className="bg-white border border-border rounded-lg shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border overflow-hidden"
       >
-        {/* Cursor Spotlight Glow */}
-        <div
-          className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-          style={{
-            background:
-              "radial-gradient(350px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.07), transparent 80%)",
-          }}
-        />
-        {/* Top Animated Accent Bar */}
-        <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-        <div className="flex items-start sm:items-center gap-3.5 relative z-10">
-          <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 text-primary shrink-0 shadow-inner group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-300">
-            <Activity className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Security Command Overview</h1>
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${
-                  wsConnected
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-amber-50 text-amber-700 border-amber-200"
-                }`}
-                title={wsConnected ? "Connected to live WebSocket event feed" : "Falling back to 10s auto-polling"}
-              >
-                <Radio className={`w-3 h-3 ${wsConnected ? "animate-pulse text-emerald-500" : "text-amber-500"}`} />
-                {wsConnected ? "Live Telemetry" : "Polling Active (10s)"}
-              </span>
-              {data.ai && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
-                  <Bot className="w-3 h-3 text-purple-600" />
-                  {data.ai.configured ? "AI Copilot Online" : "AI In Local Mode"}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted mt-0.5">
-              Live threat telemetry, cloud posture analytics, and automated SOC response actions
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0 relative z-10">
-          <button
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border border-border bg-white hover:bg-gray-50 text-foreground rounded-lg transition-all shadow-xs disabled:opacity-50 whitespace-nowrap hover:shadow-sm"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-primary" : "text-muted"}`} />
-            <span>{isRefreshing ? "Refreshing..." : "Sync Posture"}</span>
-          </button>
-
-          <Link
-            href="/assistant?q=Provide a prioritized remediation plan based on our current security posture"
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-primary hover:bg-blue-700 text-white rounded-lg transition-all shadow-xs whitespace-nowrap hover:shadow-md hover:scale-[1.02]"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Ask Copilot</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* Traffic Simulator Integrated Bar */}
-      <TrafficSimulator onComplete={() => void fetchOverview()} />
-
-      {/* EXECUTIVE SECURITY POSTURE SCORECARD BANNER */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Posture Letter Grade & Overall Risk Score */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="lg:col-span-7 relative overflow-hidden group bg-surface border border-border hover:border-orange-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-orange-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        <Link
+          href="/threats"
+          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
         >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(249, 115, 22, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-orange-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border relative z-10">
-            <div className="min-w-0">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted block mb-2">
-                Executive Security Posture
-              </span>
-              <div className="flex items-center gap-3.5">
-                <div
-                  className={`w-16 h-16 shrink-0 rounded-xl border flex flex-col items-center justify-center shadow-2xs group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-300 ${activeGradeTheme.bg} ${activeGradeTheme.text} ${activeGradeTheme.border}`}
-                >
-                  <span className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none">
-                    GRADE
-                  </span>
-                  <span className="text-3xl font-black leading-none mt-1">{grade}</span>
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-foreground leading-tight">{postureLabel}</h2>
-                  <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                    Composite score computed across active threats, cloud drift, and DevSecOps audits
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-left sm:text-right shrink-0 sm:pl-4 sm:border-l sm:border-border/60">
-              <span className="text-xs text-muted block whitespace-nowrap">Recorded Risk Index</span>
-              <div className="text-3xl font-extrabold font-mono text-foreground mt-0.5 whitespace-nowrap group-hover:translate-x-0.5 transition-transform duration-300">
-                {riskScore}
-                <span className="text-base text-muted/60 font-sans font-normal"> / 100</span>
-              </div>
-            </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Total Threats</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-
-          {/* Risk Level Visual Gauge */}
-          <div className="py-4 space-y-2 relative z-10">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-muted font-medium">Risk Distribution Spectrum</span>
-              <span className="font-semibold text-foreground">
-                {riskScore < 30
-                  ? "Minimal Risk (<30)"
-                  : riskScore < 60
-                  ? "Moderate (30-59)"
-                  : riskScore < 80
-                  ? "Elevated (60-79)"
-                  : "Critical Danger (80+)"}
-              </span>
-            </div>
-            <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
-              <div
-                className={`transition-all duration-700 ease-out ${activeGradeTheme.bar}`}
-                style={{ width: `${Math.min(100, Math.max(5, riskScore))}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-muted font-mono pt-0.5">
-              <span>0 (Hardened)</span>
-              <span>25 (Good)</span>
-              <span>50 (Moderate)</span>
-              <span>75 (Elevated)</span>
-              <span>100 (Critical)</span>
-            </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+              {data.stats.threats}
+            </span>
+            <TrendTag direction={data.trends.threats?.direction} value={data.trends.threats?.value} />
           </div>
+          <div className="text-[11px] text-slate-500 tabular-nums">
+            {data.stats.open_threats ?? 0} open · {data.stats.threats_24h ?? 0} last 24h
+          </div>
+        </Link>
 
-          {/* Sub-Pillar Breakdown */}
-          {data.posture?.breakdown && (
-            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border relative z-10">
-              <div className="bg-gray-50/80 hover:bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
-                <div className="flex justify-between items-center gap-1">
-                  <span className="text-[11px] text-muted font-medium truncate">Threat Risk</span>
-                  <span className="text-xs font-bold font-mono text-foreground shrink-0">
-                    {data.posture.breakdown.threat_risk}/50
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-gray-200 rounded-full mt-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-rose-500 rounded-full"
-                    style={{ width: `${Math.min(100, (data.posture.breakdown.threat_risk / 50) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-gray-50/80 hover:bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
-                <div className="flex justify-between items-center gap-1">
-                  <span className="text-[11px] text-muted font-medium truncate">Cloud Posture</span>
-                  <span className="text-xs font-bold font-mono text-foreground shrink-0">
-                    {data.posture.breakdown.cloud_risk}/50
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-gray-200 rounded-full mt-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-amber-500 rounded-full"
-                    style={{ width: `${Math.min(100, (data.posture.breakdown.cloud_risk / 50) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-gray-50/80 hover:bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
-                <div className="flex justify-between items-center gap-1">
-                  <span className="text-[11px] text-muted font-medium truncate">Audit & Recon</span>
-                  <span className="text-xs font-bold font-mono text-foreground shrink-0">
-                    {data.posture.breakdown.audit_risk}/50
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-gray-200 rounded-full mt-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full"
-                    style={{ width: `${Math.min(100, (data.posture.breakdown.audit_risk / 50) * 100)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* AI Copilot & Fast Remediation Card (White Surface Theme) */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="lg:col-span-5 relative overflow-hidden group bg-surface border border-border hover:border-purple-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
+        <Link
+          href="/threats"
+          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
         >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(260px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(147, 51, 234, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-border">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg text-primary shrink-0 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-muted truncate">
-                  Autonomous SecOps Copilot
-                </span>
-              </div>
-              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 font-semibold whitespace-nowrap shrink-0">
-                {data.ai?.engine?.replace("Google ", "") || "gemini-2.5-flash"}
-              </span>
-            </div>
-
-            <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
-              {riskScore >= 70
-                ? "Elevated threats detected in network ingress and public cloud configurations. Prompt Copilot to draft defensive firewall rules."
-                : "Continuous telemetry active. All high-severity incidents are prioritized for triage and policy verification."}
-            </p>
-
-            <div className="mt-3.5 space-y-2">
-              <Link
-                href="/assistant?q=What are the top 3 critical vulnerabilities currently threatening our environment and how can I fix them?"
-                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-purple-400 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group/link hover:translate-x-0.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium text-foreground">💡 &ldquo;What are the top 3 issues threatening our environment?&rdquo;</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover/link:text-purple-600 group-hover/link:translate-x-0.5 transition-all" />
-                </div>
-              </Link>
-              <Link
-                href="/assistant?q=Generate a defensive IP blocking list for the most active threat actors"
-                className="w-full block text-left text-xs bg-gray-50/90 hover:bg-white border border-border hover:border-purple-400 text-foreground rounded-lg p-2.5 transition-all shadow-2xs group/link hover:translate-x-0.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium text-foreground">🛡️ &ldquo;Generate an IP blocklist for top attackers&rdquo;</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover/link:text-purple-600 group-hover/link:translate-x-0.5 transition-all" />
-                </div>
-              </Link>
-            </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Critical Events</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
-            <span>Ready for autonomous SOC queries</span>
-            <Link
-              href="/assistant"
-              className="text-xs font-semibold text-primary hover:text-blue-700 flex items-center gap-1 transition-colors whitespace-nowrap"
+          <div className="flex items-baseline justify-between gap-2">
+            <span
+              className={`text-2xl font-semibold font-mono tabular-nums ${
+                data.stats.critical > 0 ? "text-red-600" : "text-slate-900"
+              }`}
             >
-              Open Copilot Chat <ArrowUpRight className="w-3.5 h-3.5" />
-            </Link>
+              {data.stats.critical}
+            </span>
+            <TrendTag direction={data.trends.critical?.direction} value={data.trends.critical?.value} />
           </div>
-        </div>
-      </div>
-
-      {/* 5 INTERACTIVE TOP KPI CARDS WITH CURSOR-TRACKING HOVER EFFECT */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Card 1: Total Threats */}
-        <Link
-          href="/threats"
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.09), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="flex items-center justify-between mb-3 relative z-10">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Total Threats</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-primary group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
-              <Shield className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-foreground transition-transform duration-300 group-hover:translate-x-0.5">
-                {data.stats.threats}
-              </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-primary group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-muted">
-              {data.trends.threats?.direction === "up" ? (
-                <span className="text-rose-600 font-semibold flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-0.5" /> {data.trends.threats.value}
-                </span>
-              ) : data.trends.threats?.direction === "down" ? (
-                <span className="text-emerald-600 font-semibold flex items-center">
-                  <TrendingDown className="w-3 h-3 mr-0.5" /> {data.trends.threats.value}
-                </span>
-              ) : (
-                <span className="text-muted font-medium flex items-center">
-                  <Minus className="w-3 h-3 mr-0.5" /> Stable
-                </span>
-              )}
-              <span>vs prev week</span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              {data.stats.open_threats !== undefined ? `${data.stats.open_threats} active` : "Monitored"} •{" "}
-              {data.stats.threats_24h ?? 0} in 24h
-            </div>
+          <div className="text-[11px] text-slate-500 tabular-nums">
+            {data.stats.open_critical ?? 0} requiring triage
           </div>
         </Link>
 
-        {/* Card 2: Critical Events */}
-        <Link
-          href="/threats"
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-red-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-red-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(220, 38, 38, 0.09), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-red-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="flex items-center justify-between mb-3 relative z-10">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Critical Events</span>
-            <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-red-600 transition-transform duration-300 group-hover:translate-x-0.5">
-                {data.stats.critical}
-              </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-red-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-muted">
-              {data.trends.critical?.direction === "up" ? (
-                <span className="text-rose-600 font-semibold flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-0.5" /> {data.trends.critical.value}
-                </span>
-              ) : data.trends.critical?.direction === "down" ? (
-                <span className="text-emerald-600 font-semibold flex items-center">
-                  <TrendingDown className="w-3 h-3 mr-0.5" /> {data.trends.critical.value}
-                </span>
-              ) : (
-                <span className="text-muted font-medium flex items-center">
-                  <Minus className="w-3 h-3 mr-0.5" /> Stable
-                </span>
-              )}
-              <span>7d trend</span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              {data.stats.open_critical !== undefined ? `${data.stats.open_critical} require triage` : "High priority"}
-            </div>
-          </div>
-        </Link>
-
-        {/* Card 3: Cloud Security Posture (CSPM) */}
         <Link
           href="/cspm"
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
+          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
         >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="flex items-center justify-between mb-3 relative z-10">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Cloud Posture</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
-              <Cloud className="w-4 h-4" />
-            </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Cloud Posture</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-          <div className="relative z-10">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-emerald-600 transition-transform duration-300 group-hover:translate-x-0.5">
-                {data.stats.cloud_security_score}%
-              </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-emerald-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
-            </div>
-            <div className="mt-2 text-xs text-muted">
-              <span className="font-semibold text-foreground">
-                {data.cspm ? `${data.cspm.open} open checks` : "Compliant rules"}
-              </span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              {data.cspm?.resolved ?? 0} auto-remediated
-            </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+              {data.stats.cloud_security_score}%
+            </span>
+            <span className="text-[11px] font-mono text-emerald-700 font-medium">
+              {data.cspm?.resolved ?? 0} fixed
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-500 tabular-nums">
+            {data.cspm?.open ?? 0} open misconfigurations
           </div>
         </Link>
 
-        {/* Card 4: Active SOC Alerts */}
         <Link
           href="/alerts"
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-amber-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
+          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
         >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(217, 119, 6, 0.09), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-amber-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="flex items-center justify-between mb-3 relative z-10">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Active Alerts</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
-              <AlertCircle className="w-4 h-4" />
-            </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Active Alerts</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-          <div className="relative z-10">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-foreground transition-transform duration-300 group-hover:translate-x-0.5">
-                {data.stats.active_alerts ?? data.alerts?.active ?? 0}
-              </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-amber-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
-            </div>
-            <div className="mt-2 text-xs text-muted flex items-center gap-1.5">
-              <span className="font-semibold text-rose-600">
-                {data.alerts?.by_severity?.CRITICAL ?? 0} Critical
-              </span>
-              <span>•</span>
-              <span className="font-semibold text-amber-600">
-                {data.alerts?.by_severity?.HIGH ?? 0} High
-              </span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              Click to triage incident feed
-            </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+              {data.stats.active_alerts ?? data.alerts?.active ?? 0}
+            </span>
+            <span className="text-[11px] font-mono text-slate-500">
+              <span className="text-red-600 font-medium">{data.alerts?.by_severity?.CRITICAL ?? 0}C</span> /{" "}
+              <span className="text-amber-600 font-medium">{data.alerts?.by_severity?.HIGH ?? 0}H</span>
+            </span>
           </div>
+          <div className="text-[11px] text-slate-500">Open incident queue</div>
         </Link>
 
-        {/* Card 5: DevSecOps CI/CD Scanner */}
         <Link
           href="/devsecops"
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-purple-400/80 rounded-xl p-4 shadow-xs hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between"
+          className="group p-4 hover:bg-slate-50/70 transition-colors flex flex-col justify-between gap-2"
         >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(160px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(147, 51, 234, 0.09), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="flex items-center justify-between mb-3 relative z-10">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">CI/CD Pass Rate</span>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xs transition-all duration-300 ease-out">
-              <GitBranch className="w-4 h-4" />
-            </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>CI/CD Gate Pass</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </div>
-          <div className="relative z-10">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-purple-700 transition-transform duration-300 group-hover:translate-x-0.5">
-                {effectivePassRate !== null && effectivePassRate !== undefined ? `${effectivePassRate}%` : "Active"}
-              </span>
-              <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-purple-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300 ease-out" />
-            </div>
-            <div className="mt-2 text-xs text-muted">
-              <span className="font-semibold text-foreground">
-                {totalRuns > 0 ? `${effectivePassedRuns} passed / ${totalRuns} runs` : "Automated security gate"}
-              </span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              SAST & container guardrails
-            </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+              {effectivePassRate !== null && effectivePassRate !== undefined ? `${effectivePassRate}%` : "Active"}
+            </span>
+            <span className="text-[11px] font-mono text-slate-500">
+              {totalRuns > 0 ? `${effectivePassedRuns}/${totalRuns}` : "Ready"}
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-500">
+            {data.stats.open_audit_findings ?? data.audit?.open ?? 0} open audit findings
           </div>
         </Link>
-      </div>
+      </section>
 
-      {/* QUICK ACTION HUBS: ACTIVE ALERTS & CSPM REMEDIATION */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-        {/* Active Incident Triage Banner */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-rose-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-rose-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(225, 29, 72, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-rose-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-2 mb-3.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-300" />
-                <h3 className="text-sm font-bold text-foreground truncate">Active SOC Alerts Requiring Resolution</h3>
-              </div>
-              <Link
-                href="/alerts"
-                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform"
-              >
-                View all ({data.alerts?.active ?? 0}) <ChevronRight className="w-3 h-3" />
-              </Link>
-            </div>
-
-            {(!data.alerts?.recent || data.alerts.recent.length === 0) ? (
-              <div className="p-6 text-center text-muted border border-dashed border-border rounded-lg bg-gray-50/50 flex flex-col items-center justify-center min-h-[168px]">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                <p className="text-xs font-semibold text-foreground">Zero Active Critical Alerts</p>
-                <p className="text-[11px] text-muted mt-0.5">All monitored incident streams are currently clear.</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {data.alerts.recent.slice(0, 3).map((alert) => (
-                  <div
-                    key={alert.id}
-                    className="p-3 rounded-lg border border-border bg-gray-50/60 hover:bg-white hover:border-rose-200 hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                            alert.severity === "CRITICAL"
-                              ? "bg-rose-100 text-rose-700"
-                              : alert.severity === "HIGH"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {alert.severity}
-                        </span>
-                        <h4 className="text-xs font-bold text-foreground truncate">{alert.title}</h4>
-                      </div>
-                      <p className="text-[11px] text-muted truncate mt-0.5">
-                        <span className="font-mono text-foreground/80">{alert.source}</span> • {alert.message}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleResolveAlert(alert.id, alert.title)}
-                      disabled={resolvingAlertId === alert.id}
-                      className="shrink-0 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-400 rounded-md transition-all flex items-center gap-1 shadow-2xs hover:shadow-xs hover:scale-105 disabled:opacity-50"
-                      title="Mark this alert as resolved"
-                    >
-                      {resolvingAlertId === alert.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5" />
-                      )}
-                      <span>Resolve</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center text-[11px] relative z-10">
-            <div className="bg-gray-50 hover:bg-white rounded-md py-1.5 px-2 border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
-              <span className="text-muted block">Active Queue</span>
-              <span className="font-mono font-bold text-foreground">{data.alerts?.active ?? 0}</span>
-            </div>
-            <div className="bg-rose-50/50 hover:bg-rose-50 rounded-md py-1.5 px-2 border border-rose-100 hover:border-rose-200 hover:shadow-2xs transition-all duration-200">
-              <span className="text-muted block">Critical</span>
-              <span className="font-mono font-bold text-rose-700">{data.alerts?.by_severity?.CRITICAL ?? 0}</span>
-            </div>
-            <div className="bg-amber-50/50 hover:bg-amber-50 rounded-md py-1.5 px-2 border border-amber-100 hover:border-amber-200 hover:shadow-2xs transition-all duration-200">
-              <span className="text-muted block">High</span>
-              <span className="font-mono font-bold text-amber-700">{data.alerts?.by_severity?.HIGH ?? 0}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Cloud Misconfiguration Remediation Card */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="relative overflow-hidden group bg-surface border border-border hover:border-emerald-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-2 mb-3.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <Wrench className="w-4 h-4 text-emerald-600 shrink-0 group-hover:scale-110 group-hover:rotate-12 transition-transform duration-300" />
-                <h3 className="text-sm font-bold text-foreground truncate">Cloud Policy Enforcement (CSPM)</h3>
-              </div>
-              <Link
-                href="/cspm"
-                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform"
-              >
-                Open CSPM ({data.cspm?.open ?? 0} open) <ChevronRight className="w-3 h-3" />
-              </Link>
-            </div>
-
-            {(!data.cspm?.top_open || data.cspm.top_open.length === 0) ? (
-              <div className="p-6 text-center text-muted border border-dashed border-border rounded-lg bg-gray-50/50 flex flex-col items-center justify-center min-h-[168px]">
-                <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80 group-hover:scale-105 transition-transform" />
-                <p className="text-xs font-semibold text-foreground">All Cloud Postures Compliant</p>
-                <p className="text-[11px] text-muted mt-0.5 max-w-xs">
-                  Zero open misconfigurations found across monitored AWS, GCP, and Azure resources.
-                </p>
-                <button
-                  onClick={handleRunCspmScan}
-                  disabled={scanningCspm}
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 transition-colors shadow-2xs hover:shadow-xs hover:scale-105 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${scanningCspm ? "animate-spin" : ""}`} />
-                  <span>{scanningCspm ? "Scanning Cloud..." : "Re-Scan Cloud Resources"}</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {data.cspm.top_open.slice(0, 3).map((finding) => (
-                  <div
-                    key={finding.id}
-                    className="p-3 rounded-lg border border-border bg-gray-50/60 hover:bg-white hover:border-emerald-200 hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                            finding.severity === "CRITICAL"
-                              ? "bg-rose-100 text-rose-700"
-                              : finding.severity === "HIGH"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {finding.severity}
-                        </span>
-                        <h4 className="text-xs font-bold text-foreground truncate">{finding.finding}</h4>
-                      </div>
-                      <p className="text-[11px] text-muted font-mono truncate mt-0.5">
-                        {finding.resource}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleRemediateCspm(finding.id, finding.resource)}
-                      disabled={remediatingCspmId === finding.id}
-                      className="shrink-0 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 hover:border-blue-400 rounded-md transition-all flex items-center gap-1 shadow-2xs hover:shadow-xs hover:scale-105 disabled:opacity-50"
-                      title="Enforce secure configuration rule"
-                    >
-                      {remediatingCspmId === finding.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Wrench className="w-3.5 h-3.5" />
-                      )}
-                      <span>Enforce</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-2 text-center text-[11px] relative z-10">
-            <div className="bg-emerald-50/50 hover:bg-emerald-50 rounded-md py-1.5 px-2 border border-emerald-100 hover:border-emerald-200 hover:shadow-2xs transition-all duration-200">
-              <span className="text-muted block">Posture Score</span>
-              <span className="font-mono font-bold text-emerald-700">{data.stats.cloud_security_score}%</span>
-            </div>
-            <div className="bg-gray-50 hover:bg-white rounded-md py-1.5 px-2 border border-gray-100 hover:border-gray-200 hover:shadow-2xs transition-all duration-200">
-              <span className="text-muted block">Open Drift</span>
-              <span className="font-mono font-bold text-foreground">{data.cspm?.open ?? 0}</span>
-            </div>
-            <div className="bg-blue-50/50 hover:bg-blue-50 rounded-md py-1.5 px-2 border border-blue-100 hover:border-blue-200 hover:shadow-2xs transition-all duration-200">
-              <span className="text-muted block">Remediated</span>
-              <span className="font-mono font-bold text-blue-700">{data.cspm?.resolved ?? 0}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* TELEMETRY CHARTS & ATTACK INTEL ROW */}
+      {/* Row 2: Security Posture Scorecard (7 cols) + Platform Operations Summary (5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* 14-Day Attack Timeline Stacked Area */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="lg:col-span-7 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
+        {/* Security Posture & Domain Risk Breakdown */}
+        <section className="lg:col-span-7 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Security Posture & Risk Breakdown</h2>
+              <p className="text-xs text-slate-500">Composite exposure across threats, cloud configuration, and audits</p>
+            </div>
+            <Link
+              href="/analytics"
+              className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline shrink-0"
+            >
+              Risk report →
+            </Link>
+          </div>
 
-          <div className="relative z-10">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-              <div>
-                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-primary group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300" /> 14-Day Threat Telemetry Timeline
-                </h2>
-                <p className="text-xs text-muted">Daily distribution of recorded attack incidents by severity</p>
+          <div className="p-5 space-y-5 flex-1 flex flex-col justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div
+                  className={`w-12 h-12 rounded-lg border flex flex-col items-center justify-center shrink-0 ${
+                    gradeBadgeStyle[grade] || gradeBadgeStyle.C
+                  }`}
+                >
+                  <span className="text-[9px] font-semibold uppercase tracking-wider leading-none opacity-80">
+                    Grade
+                  </span>
+                  <span className="text-xl font-bold leading-none mt-0.5 font-mono">{grade}</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-base font-semibold text-slate-900">{postureLabel}</div>
+                  <div className="text-xs text-slate-500">
+                    {riskScore < 30
+                      ? "Low overall exposure across monitored environments."
+                      : riskScore < 60
+                      ? "Moderate exposure — review open drift and audit items."
+                      : "Elevated exposure — prioritize untriaged critical incidents."}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-[11px] shrink-0">
-                <span className="flex items-center gap-1 text-rose-600 font-medium">
-                  <span className="w-2.5 h-2.5 bg-rose-500 rounded-xs" /> Critical
+
+              <div className="sm:text-right shrink-0">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500 block">
+                  Risk Index
                 </span>
-                <span className="flex items-center gap-1 text-amber-600 font-medium">
-                  <span className="w-2.5 h-2.5 bg-amber-500 rounded-xs" /> High
-                </span>
-                <span className="flex items-center gap-1 text-blue-600 font-medium">
-                  <span className="w-2.5 h-2.5 bg-blue-500 rounded-xs" /> Medium
-                </span>
-                <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                  <span className="w-2.5 h-2.5 bg-emerald-500 rounded-xs" /> Low
+                <div className="text-2xl font-semibold font-mono tabular-nums text-slate-900">
+                  {riskScore}
+                  <span className="text-sm font-normal text-slate-400"> / 100</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Clean Risk Scale Bar */}
+            <div className="space-y-1.5">
+              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 ${gradeBarStyle[grade] || gradeBarStyle.C}`}
+                  style={{ width: `${Math.min(100, Math.max(4, riskScore))}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                <span>0 Hardened</span>
+                <span>25 Low</span>
+                <span>50 Moderate</span>
+                <span>75 Elevated</span>
+                <span>100 Critical</span>
+              </div>
+            </div>
+
+            {/* Sub-pillar Breakdown */}
+            {data.posture?.breakdown && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-border">
+                {[
+                  { label: "Threat Risk", value: data.posture.breakdown.threat_risk, bar: "bg-red-600" },
+                  { label: "Cloud Posture", value: data.posture.breakdown.cloud_risk, bar: "bg-amber-500" },
+                  { label: "Audit & Recon", value: data.posture.breakdown.audit_risk, bar: "bg-blue-600" },
+                ].map((pillar) => (
+                  <div key={pillar.label} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-medium">{pillar.label}</span>
+                      <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                        {pillar.value}
+                        <span className="text-slate-400 font-normal">/50</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${pillar.bar}`}
+                        style={{ width: `${Math.min(100, (pillar.value / 50) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Platform Health & Operations Status Table */}
+        <section className="lg:col-span-5 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">System & Sensor Health</h2>
+              <p className="text-xs text-slate-500">Live inspection engine telemetry and coverage</p>
+            </div>
+            <Link
+              href="/monitoring"
+              className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline shrink-0"
+            >
+              Metrics →
+            </Link>
+          </div>
+
+          <div className="divide-y divide-border text-xs flex-1">
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <span className="text-slate-600 font-medium shrink-0">CPU Utilization</span>
+              <div className="flex items-center gap-3 flex-1 max-w-[200px]">
+                <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full"
+                    style={{ width: `${Math.min(100, data.system?.cpu_usage ?? 18.4)}%` }}
+                  />
+                </div>
+                <span className="font-mono font-semibold text-slate-900 tabular-nums w-11 text-right">
+                  {data.system?.cpu_usage ?? 18.4}%
                 </span>
               </div>
             </div>
 
-            <div className="h-[250px] w-full">
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <span className="text-slate-600 font-medium shrink-0">Memory Allocation</span>
+              <div className="flex items-center gap-3 flex-1 max-w-[200px]">
+                <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-slate-700 rounded-full"
+                    style={{ width: `${Math.min(100, data.system?.memory_usage ?? 42.1)}%` }}
+                  />
+                </div>
+                <span className="font-mono font-semibold text-slate-900 tabular-nums w-11 text-right">
+                  {data.system?.memory_usage ?? 42.1}%
+                </span>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <span className="text-slate-600 font-medium">Gateway Latency & I/O</span>
+              <span className="font-mono text-slate-900 tabular-nums">
+                <strong className="font-semibold">{data.system?.api_latency ?? 12.3} ms</strong>
+                <span className="text-slate-400 mx-1.5">·</span>
+                <span className="text-slate-600">
+                  {data.system?.network_rx ?? 124}/{data.system?.network_tx ?? 86} KB/s
+                </span>
+              </span>
+            </div>
+
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <span className="text-slate-600 font-medium">Latest Audit Target</span>
+              {data.audit?.latest_report ? (
+                <Link
+                  href="/devsecops"
+                  className="font-mono text-slate-900 hover:text-blue-600 truncate max-w-[200px]"
+                  title={data.audit.latest_report.target}
+                >
+                  {data.audit.latest_report.target}
+                </Link>
+              ) : (
+                <span className="text-slate-400">No audit recorded</span>
+              )}
+            </div>
+
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <span className="text-slate-600 font-medium">Latest CI/CD Gate</span>
+              {latestPipeline ? (
+                <span className="inline-flex items-center gap-2 font-mono text-slate-700 truncate">
+                  <span>{latestPipeline.commit_sha.slice(0, 7)}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                      (latestPipeline.status || "").toUpperCase().includes("FAIL")
+                        ? "bg-red-50 text-red-700 border border-red-200"
+                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    }`}
+                  >
+                    {latestPipeline.status}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-slate-500 font-mono">Standing by</span>
+              )}
+            </div>
+
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <span className="text-slate-600 font-medium">Analysis Assistant</span>
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-slate-700">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      data.ai?.configured ? "bg-emerald-600" : "bg-amber-500"
+                    }`}
+                  />
+                  {aiProviderLabel}
+                </span>
+                <Link
+                  href="/assistant"
+                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                >
+                  Open →
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* Row 3: Telemetry Charts (8 cols + 4 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* 14-Day Threat Activity Timeline */}
+        <section className="lg:col-span-8 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+          <div className="px-5 py-3.5 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Threat Activity (14 Days)</h2>
+              <p className="text-xs text-slate-500">Daily recorded security events grouped by severity</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-slate-600 shrink-0">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-xs bg-red-600" /> Critical
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-xs bg-amber-500" /> High
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-xs bg-blue-600" /> Medium
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-xs bg-slate-400" /> Low
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5">
+            <div className="h-[240px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={timelineChartData}>
+                <AreaChart data={timelineChartData} margin={{ top: 4, right: 6, left: -12, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} allowDecimals={false} width={28} />
+                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#ffffff",
-                      borderRadius: "8px",
+                      borderRadius: "6px",
                       border: "1px solid #e2e8f0",
                       fontSize: "12px",
-                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)",
+                      boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
                     }}
                   />
-                  <Area type="monotone" dataKey="critical" stackId="1" stroke="#e11d48" fill="#e11d48" fillOpacity={0.7} />
-                  <Area type="monotone" dataKey="high" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.7} />
-                  <Area type="monotone" dataKey="medium" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.7} />
-                  <Area type="monotone" dataKey="low" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.7} />
+                  <Area type="monotone" dataKey="critical" stackId="1" stroke="#dc2626" fill="#dc2626" fillOpacity={0.18} strokeWidth={1.75} />
+                  <Area type="monotone" dataKey="high" stackId="1" stroke="#d97706" fill="#d97706" fillOpacity={0.18} strokeWidth={1.75} />
+                  <Area type="monotone" dataKey="medium" stackId="1" stroke="#2563eb" fill="#2563eb" fillOpacity={0.15} strokeWidth={1.75} />
+                  <Area type="monotone" dataKey="low" stackId="1" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.15} strokeWidth={1.5} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
+        </section>
 
-          <div className="pt-3 mt-2 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
-            <span>Real-time event correlation across network sensors</span>
-            <Link href="/threats" className="text-primary hover:underline font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform">
-              Explore Threat Log →
-            </Link>
-          </div>
-        </div>
-
-        {/* Attack Vector Distribution */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="lg:col-span-5 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="relative z-10">
-            <div className="flex items-start justify-between gap-2 mb-4">
-              <div className="min-w-0">
-                <h2 className="text-base font-bold text-foreground">Threat Vector Breakdown</h2>
-                <p className="text-xs text-muted">Attack mechanisms classified by SentinelX ML models</p>
-              </div>
-              <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0 group-hover:scale-105 transition-transform">
-                {data.threat_distribution.reduce((acc, curr) => acc + curr.count, 0)} Total
-              </span>
+        {/* Threat Vector Breakdown */}
+        <section className="lg:col-span-4 bg-white border border-border rounded-lg shadow-xs flex flex-col justify-between">
+          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Attack Vectors</h2>
+              <p className="text-xs text-slate-500">Classified by ML Random Forest IDS</p>
             </div>
+            <span className="text-xs font-mono font-medium text-slate-600 tabular-nums">
+              {totalVectors} total
+            </span>
+          </div>
 
-            <div className="h-[250px] w-full">
+          <div className="p-5 flex-1 flex flex-col justify-between">
+            <div className="h-[240px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.threat_distribution} layout="vertical" margin={{ left: 4, right: 12 }}>
+                <BarChart data={data.threat_distribution} layout="vertical" margin={{ left: 0, right: 12, top: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                  <XAxis type="number" stroke="#94a3b8" fontSize={11} tickLine={false} allowDecimals={false} />
-                  <YAxis dataKey="label" type="category" stroke="#64748b" fontSize={11} width={88} tickLine={false} />
+                  <XAxis type="number" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <YAxis dataKey="label" type="category" stroke="#475569" fontSize={11} width={88} tickLine={false} axisLine={false} />
                   <Tooltip
                     cursor={{ fill: "#f8fafc" }}
                     contentStyle={{
                       backgroundColor: "#ffffff",
-                      borderRadius: "8px",
+                      borderRadius: "6px",
                       border: "1px solid #e2e8f0",
                       fontSize: "12px",
+                      boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
                     }}
                   />
-                  <Bar dataKey="count" fill="#2563EB" radius={[0, 4, 4, 0]} barSize={20} />
+                  <Bar dataKey="count" fill="#2563eb" radius={[0, 3, 3, 0]} barSize={16} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-
-          <div className="pt-3 mt-2 border-t border-border flex items-center justify-between gap-2 text-xs text-muted relative z-10">
-            <span className="truncate">Classified with ML Random Forest & Suricata rules</span>
-            <Link href="/analytics" className="text-primary hover:underline font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform">
-              Detailed Analytics →
-            </Link>
-          </div>
-        </div>
+        </section>
       </div>
 
-      {/* TOP ATTACKING SOURCES WIDGET & DEVSECOPS/TELEMETRY GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Top Attacking Sources */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="lg:col-span-7 relative overflow-hidden group bg-surface border border-border hover:border-blue-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(300px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-2 mb-3.5">
-              <div>
-                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Server className="w-4 h-4 text-primary group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-300" /> Top Attacking Sources (Past 30 Days)
-                </h3>
-                <p className="text-xs text-muted">Click an IP to immediately filter the incidents table below</p>
-              </div>
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="text-xs text-muted hover:text-foreground flex items-center gap-1 border border-border px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 hover:bg-gray-50 transition-colors"
-                >
-                  Clear filter <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {(!data.top_sources || data.top_sources.length === 0) ? (
-              <div className="p-8 text-center text-muted border border-dashed border-border rounded-lg bg-gray-50">
-                No persistent external attack actors detected in recorded window.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {data.top_sources.slice(0, 4).map((actor) => (
-                  <div
-                    key={actor.source}
-                    onMouseMove={handleCardMouseMove}
-                    className={`relative overflow-hidden group/tile p-3 rounded-lg border transition-all duration-200 text-xs cursor-pointer flex flex-col justify-between hover:shadow-md hover:-translate-y-1 ${
-                      searchQuery === actor.source
-                        ? "bg-blue-50/70 border-primary shadow-xs ring-1 ring-primary/30"
-                        : "bg-white border-border hover:border-blue-400 hover:bg-blue-50/30"
-                    }`}
-                    onClick={() => setSearchQuery(actor.source)}
-                  >
-                    {/* Inner Tile Spotlight Glow */}
-                    <div
-                      className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/tile:opacity-100 transition-opacity duration-300"
-                      style={{
-                        background:
-                          "radial-gradient(130px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.1), transparent 80%)",
-                      }}
-                    />
-
-                    <div className="relative z-10 flex flex-col justify-between h-full">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-1.5 font-mono font-bold text-foreground">
-                            <span className="group-hover/tile:text-primary transition-colors">{actor.source}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyToClipboard(actor.source);
-                              }}
-                              className="text-muted hover:text-foreground p-0.5 rounded hover:bg-gray-100 transition-colors"
-                              title="Copy IP"
-                            >
-                              {copiedIp === actor.source ? (
-                                <Check className="w-3 h-3 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                              actor.max_severity === "CRITICAL"
-                                ? "bg-rose-100 text-rose-700"
-                                : actor.max_severity === "HIGH"
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-blue-100 text-blue-700"
-                            }`}
-                          >
-                            {actor.max_severity}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-muted text-[11px]">
-                          <span>
-                            <strong className="text-foreground">{actor.count}</strong>{" "}
-                            {actor.count === 1 ? "event" : "events"}
-                          </span>
-                          <span className="truncate max-w-[150px] text-right font-medium text-foreground/80">
-                            {actor.types.join(", ")}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 pt-1.5 border-t border-border/60 flex items-center justify-between text-[10px] text-muted">
-                        <span className={actor.simulated ? "text-blue-600 font-medium" : "text-emerald-700 font-medium"}>
-                          {actor.simulated ? "Simulated Traffic" : "Recorded Traffic"}
-                        </span>
-                        <span className="group-hover/tile:text-primary font-medium transition-colors">Click to filter ↓</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
-            <span>Showing top {Math.min(4, data.top_sources?.length ?? 0)} persistent source IPs</span>
-            <Link href="/threats" className="text-primary hover:underline font-medium whitespace-nowrap hover:translate-x-0.5 transition-transform">
-              Full IP Reputation List →
-            </Link>
-          </div>
-        </div>
-
-        {/* Live System Performance & Telemetry */}
-        <div
-          onMouseMove={handleCardMouseMove}
-          className="lg:col-span-5 relative overflow-hidden group bg-surface border border-border hover:border-indigo-400/80 rounded-xl p-5 shadow-xs hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between"
-        >
-          {/* Cursor Spotlight Glow */}
-          <div
-            className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background:
-                "radial-gradient(280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.08), transparent 80%)",
-            }}
-          />
-          {/* Top Animated Accent Bar */}
-          <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div>
-                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-primary group-hover:scale-110 group-hover:rotate-12 transition-transform duration-300" /> System Resource Telemetry
-                </h3>
-                <p className="text-xs text-muted">Real-time health of SentinelX inspection engine</p>
-              </div>
-              <Link href="/monitoring" className="text-xs text-primary hover:underline font-medium whitespace-nowrap shrink-0 hover:translate-x-0.5 transition-transform">
-                All metrics →
-              </Link>
-            </div>
-
-            <div className="space-y-3.5">
-              {/* CPU Meter */}
-              <div>
-                <div className="flex justify-between items-center text-xs mb-1">
-                  <span className="text-muted font-medium">CPU Utilization</span>
-                  <span className="font-mono font-bold text-foreground">
-                    {data.system?.cpu_usage ?? 18.4}%
-                  </span>
-                </div>
-                <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                    style={{ width: `${data.system?.cpu_usage ?? 18.4}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Memory Meter */}
-              <div>
-                <div className="flex justify-between items-center text-xs mb-1">
-                  <span className="text-muted font-medium">Memory Allocation</span>
-                  <span className="font-mono font-bold text-foreground">
-                    {data.system?.memory_usage ?? 42.1}%
-                  </span>
-                </div>
-                <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                    style={{ width: `${data.system?.memory_usage ?? 42.1}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* 2x2 Sub-Telemetry Grid */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <div
-                  onMouseMove={handleCardMouseMove}
-                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-emerald-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  <div
-                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
-                    style={{
-                      background:
-                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
-                    }}
-                  />
-                  <div className="relative z-10">
-                    <span className="text-[10px] text-muted uppercase font-semibold block">Gateway Latency</span>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="font-mono text-xs font-bold text-emerald-700">
-                        {data.system?.api_latency ?? 12.3} ms
-                      </span>
-                      <Clock className="w-3.5 h-3.5 text-emerald-600 group-hover/sub:scale-110 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  onMouseMove={handleCardMouseMove}
-                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-blue-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  <div
-                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
-                    style={{
-                      background:
-                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.09), transparent 80%)",
-                    }}
-                  />
-                  <div className="relative z-10">
-                    <span className="text-[10px] text-muted uppercase font-semibold block">Net RX / TX</span>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="font-mono text-xs font-bold text-foreground">
-                        {data.system?.network_rx ?? 124} / {data.system?.network_tx ?? 86} KB/s
-                      </span>
-                      <Activity className="w-3.5 h-3.5 text-blue-600 group-hover/sub:scale-110 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  onMouseMove={handleCardMouseMove}
-                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-indigo-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  <div
-                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
-                    style={{
-                      background:
-                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.09), transparent 80%)",
-                    }}
-                  />
-                  <div className="relative z-10">
-                    <span className="text-[10px] text-muted uppercase font-semibold block">Recon Findings</span>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="font-mono text-xs font-bold text-foreground">
-                        {data.stats.open_audit_findings ?? data.audit?.open ?? 0} Open
-                      </span>
-                      <Shield className="w-3.5 h-3.5 text-indigo-600 group-hover/sub:scale-110 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  onMouseMove={handleCardMouseMove}
-                  className="relative overflow-hidden group/sub p-2.5 rounded-lg bg-gray-50 hover:bg-white border border-border hover:border-emerald-300 hover:shadow-xs hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  <div
-                    className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover/sub:opacity-100 transition-opacity duration-300"
-                    style={{
-                      background:
-                        "radial-gradient(110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(16, 185, 129, 0.09), transparent 80%)",
-                    }}
-                  />
-                  <div className="relative z-10">
-                    <span className="text-[10px] text-muted uppercase font-semibold block">ML Classifier</span>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="font-mono text-xs font-bold text-emerald-700">Online</span>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 group-hover/sub:scale-110 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted relative z-10">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> All container pods healthy
-            </span>
-            <span className="font-mono text-[11px]">99.98% Uptime</span>
-          </div>
-        </div>
-      </div>
-
-      {/* RECENT CRITICAL EVENTS TABLE (INTERACTIVE COMMAND CENTER) */}
-      <div
-        onMouseMove={handleCardMouseMove}
-        className="relative overflow-hidden group bg-surface border border-border hover:border-blue-400/60 rounded-xl shadow-xs hover:shadow-md transition-all duration-300 ease-out"
-      >
-        {/* Cursor Spotlight Glow */}
-        <div
-          className="pointer-events-none absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-          style={{
-            background:
-              "radial-gradient(400px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(37, 99, 235, 0.04), transparent 80%)",
-          }}
-        />
-        {/* Top Animated Accent Bar */}
-        <div className="absolute top-0 inset-x-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-300 ease-out origin-center" />
-
-        <div className="relative z-10">
-        {/* Table Header & Interactive Search/Filters */}
-        <div className="p-5 border-b border-border bg-white flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-bold text-foreground">Recorded Threat Incidents</h2>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">
-                {filteredEvents.length} shown
+      {/* Row 4: Actionable Triage Queues (Alerts + CSPM) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+        {/* Active Alerts Queue */}
+        <section className="bg-white border border-border rounded-lg shadow-xs flex flex-col">
+          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-sm font-semibold text-slate-900 truncate">Active Alerts</h2>
+              <span className="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tabular-nums">
+                {data.alerts?.active ?? 0}
               </span>
             </div>
-            <p className="text-xs text-muted mt-0.5">
-              Click status badges to triage (Open → Investigating → Resolved). Instant search by IP or attack type.
+            <Link
+              href="/alerts"
+              className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline shrink-0"
+            >
+              View all →
+            </Link>
+          </div>
+
+          <div className="flex-1 divide-y divide-border">
+            {!data.alerts?.recent || data.alerts.recent.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center min-h-[180px]">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 mb-2" />
+                <p className="text-xs font-medium text-slate-900">No open alerts</p>
+                <p className="text-xs text-slate-500 mt-0.5">All monitored incident streams are currently clear.</p>
+              </div>
+            ) : (
+              data.alerts.recent.slice(0, 4).map((alert) => (
+                <div
+                  key={alert.id}
+                  className="px-5 py-3 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <SeverityDot severity={alert.severity} />
+                      <h3 className="text-xs font-semibold text-slate-900 truncate">{alert.title}</h3>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      <span className="font-mono text-slate-700">{alert.source}</span> · {alert.message}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleResolveAlert(alert.id, alert.title)}
+                    disabled={resolvingAlertId === alert.id}
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-border hover:border-slate-300 rounded-md transition-colors disabled:opacity-50"
+                  >
+                    {resolvingAlertId === alert.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    )}
+                    <span>Resolve</span>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* Cloud Policy Drift (CSPM) */}
+        <section className="bg-white border border-border rounded-lg shadow-xs flex flex-col">
+          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-sm font-semibold text-slate-900 truncate">Cloud Policy Drift (CSPM)</h2>
+              <span className="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tabular-nums">
+                {data.cspm?.open ?? 0} open
+              </span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={handleRunCspmScan}
+                disabled={scanningCspm}
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${scanningCspm ? "animate-spin text-blue-600" : ""}`} />
+                <span>{scanningCspm ? "Scanning..." : "Scan"}</span>
+              </button>
+              <Link
+                href="/cspm"
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                Open CSPM →
+              </Link>
+            </div>
+          </div>
+
+          <div className="flex-1 divide-y divide-border">
+            {!data.cspm?.top_open || data.cspm.top_open.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center min-h-[180px]">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 mb-2" />
+                <p className="text-xs font-medium text-slate-900">Cloud configurations compliant</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  No open misconfigurations detected across AWS, GCP, or Azure checks.
+                </p>
+              </div>
+            ) : (
+              data.cspm.top_open.slice(0, 4).map((finding) => (
+                <div
+                  key={finding.id}
+                  className="px-5 py-3 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <SeverityDot severity={finding.severity} />
+                      <h3 className="text-xs font-semibold text-slate-900 truncate">{finding.finding}</h3>
+                    </div>
+                    <p className="text-[11px] font-mono text-slate-500 truncate">{finding.resource}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemediateCspm(finding.id, finding.resource)}
+                    disabled={remediatingCspmId === finding.id}
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-white hover:bg-slate-50 text-blue-700 border border-border hover:border-blue-300 rounded-md transition-colors disabled:opacity-50"
+                  >
+                    {remediatingCspmId === finding.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : null}
+                    <span>Enforce</span>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Row 5: Recorded Threat Incidents Table with Integrated Top Source IP Quick-Filters */}
+      <section className="bg-white border border-border rounded-lg shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-slate-500 shrink-0" />
+              <h2 className="text-sm font-semibold text-slate-900">Recorded Threat Incidents</h2>
+              <span className="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tabular-nums">
+                {filteredEvents.length} / {recentEvents.length}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Filter by source IP, severity, or status. Update triage status directly inline.
             </p>
           </div>
 
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
-            {/* Search Input */}
-            <div className="relative w-full sm:w-52">
-              <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+            <div className="relative w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search IP, ID, type..."
+                placeholder="Filter IP, event ID, type..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-border rounded-lg text-foreground focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-border rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                 >
                   <X className="w-3 h-3" />
                 </button>
               )}
             </div>
 
-            {/* Severity Filter Pills */}
-            <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs font-medium shrink-0">
+            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-md border border-border text-xs">
               {["ALL", "CRITICAL", "HIGH", "MEDIUM"].map((sev) => (
                 <button
                   key={sev}
+                  type="button"
                   onClick={() => setSeverityFilter(sev)}
-                  className={`px-2 py-1 rounded-md transition-all ${
+                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
                     severityFilter === sev
-                      ? "bg-white text-foreground shadow-2xs font-semibold"
-                      : "text-muted hover:text-foreground"
+                      ? "bg-white text-slate-900 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  {sev}
+                  {sev === "ALL" ? "All" : sev.charAt(0) + sev.slice(1).toLowerCase()}
                 </button>
               ))}
             </div>
 
-            {/* Status Filter */}
             <select
+              aria-label="Filter by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs bg-white border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
+              className="text-xs bg-white border border-border rounded-md px-2.5 py-1.5 text-slate-700 focus:outline-none focus:border-blue-500"
             >
-              <option value="ALL">All Statuses</option>
+              <option value="ALL">All statuses</option>
               <option value="Open">Open</option>
               <option value="Investigating">Investigating</option>
               <option value="Resolved">Resolved</option>
@@ -1697,73 +1184,130 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Table Body */}
+        {/* Integrated Top Attacking Sources Filter Strip */}
+        {data.top_sources && data.top_sources.length > 0 && (
+          <div className="px-5 py-2.5 border-b border-border bg-slate-50/60 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-[11px] font-medium text-slate-500 mr-1">Top source IPs:</span>
+            {data.top_sources.slice(0, 5).map((actor) => {
+              const active = searchQuery === actor.source;
+              return (
+                <div
+                  key={actor.source}
+                  className={`inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border text-[11px] transition-colors ${
+                    active
+                      ? "bg-blue-50 border-blue-300 text-blue-800"
+                      : "bg-white border-border text-slate-700 hover:border-slate-300"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery(active ? "" : actor.source)}
+                    className="inline-flex items-center gap-1.5 font-mono"
+                    title={`Filter events by ${actor.source} (${actor.types.join(", ")})`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        actor.max_severity === "CRITICAL"
+                          ? "bg-red-600"
+                          : actor.max_severity === "HIGH"
+                          ? "bg-amber-500"
+                          : "bg-blue-600"
+                      }`}
+                    />
+                    <span>{actor.source}</span>
+                    <span className="text-slate-400">({actor.count})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(actor.source)}
+                    className="p-0.5 text-slate-400 hover:text-slate-700 rounded"
+                    title="Copy IP address"
+                  >
+                    {copiedIp === actor.source ? (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-[11px] text-slate-500 hover:text-slate-900 underline ml-1"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
-            <thead className="text-[11px] text-muted uppercase bg-gray-50/70 border-b border-border">
+            <thead className="text-[11px] text-slate-500 uppercase tracking-wider bg-slate-50/70 border-b border-border">
               <tr>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Event ID & Time</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Classification</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Source IP</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Destination</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Severity</th>
-                <th className="px-4 py-3 font-semibold whitespace-nowrap">Triage Status</th>
-                <th className="px-4 py-3 font-semibold text-right whitespace-nowrap">Copilot</th>
+                <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Event ID & Time</th>
+                <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Classification</th>
+                <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Source IP</th>
+                <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Destination</th>
+                <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Severity</th>
+                <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Status</th>
+                <th className="px-4 py-2.5 font-semibold text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted">
-                    <p className="text-xs font-semibold text-foreground">No events match your search or filter.</p>
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    <p className="text-xs font-medium text-slate-900">No events match the active filters.</p>
                     <button
+                      type="button"
                       onClick={() => {
                         setSearchQuery("");
                         setSeverityFilter("ALL");
                         setStatusFilter("ALL");
                       }}
-                      className="mt-2 text-xs text-primary hover:underline font-medium"
+                      className="mt-1.5 text-xs text-blue-600 hover:underline font-medium"
                     >
-                      Reset all filters
+                      Reset filters
                     </button>
                   </td>
                 </tr>
               ) : (
                 filteredEvents.map((event) => {
                   const isUpdating = updatingThreatId === event.id;
-
                   return (
-                    <tr key={event.id} className="hover:bg-gray-50/80 transition-colors">
-                      {/* Event ID & Time */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-mono font-bold text-foreground">{event.id}</div>
-                        <div className="text-[11px] text-muted mt-0.5">{event.time}</div>
+                    <tr key={event.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="font-mono font-medium text-slate-900">{event.id}</div>
+                        <div className="text-[11px] font-mono text-slate-400 tabular-nums">{event.time}</div>
                       </td>
 
-                      {/* Classification & Type */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="font-medium text-slate-900 flex items-center gap-1.5">
                           <span>{event.type}</span>
                           {event.simulated && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-border">
                               Simulated
                             </span>
                           )}
                         </div>
                         {event.confidence !== undefined && (
-                          <div className="text-[10px] text-muted mt-0.5">
-                            Confidence: {Math.round(event.confidence * 100)}%
+                          <div className="text-[11px] font-mono text-slate-400 tabular-nums">
+                            {Math.round(event.confidence * 100)}% confidence
                           </div>
                         )}
                       </td>
 
-                      {/* Source IP */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-foreground font-medium">{event.source}</span>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="font-mono text-slate-900">{event.source}</span>
                           <button
+                            type="button"
                             onClick={() => copyToClipboard(event.source)}
-                            className="p-1 text-muted hover:text-foreground rounded"
+                            className="p-0.5 text-slate-400 hover:text-slate-700 rounded"
                             title="Copy IP"
                           >
                             {copiedIp === event.source ? (
@@ -1775,63 +1319,52 @@ export default function OverviewPage() {
                         </div>
                       </td>
 
-                      {/* Destination */}
-                      <td className="px-4 py-3 whitespace-nowrap text-muted font-mono text-[11px]">
+                      <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[11px] text-slate-500">
                         {event.destination || "api-gateway:443"}
                       </td>
 
-                      {/* Severity */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${
-                            event.severity.toUpperCase() === "CRITICAL"
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : event.severity.toUpperCase() === "HIGH"
-                              ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : event.severity.toUpperCase() === "MEDIUM"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          }`}
-                        >
-                          {event.severity}
-                        </span>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <SeverityDot severity={event.severity} />
                       </td>
 
-                      {/* Interactive Triage Action */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="inline-flex items-center rounded-lg border border-border bg-white p-0.5 shadow-2xs">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="inline-flex items-center rounded-md border border-border bg-slate-50 p-0.5">
                           {(["Open", "Investigating", "Resolved"] as const).map((st) => {
                             const isCurrent = event.status.toLowerCase() === st.toLowerCase();
                             return (
                               <button
                                 key={st}
+                                type="button"
                                 disabled={isUpdating}
                                 onClick={() => handleUpdateThreatStatus(event.id, st)}
-                                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
+                                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors ${
                                   isCurrent
                                     ? st === "Open"
-                                      ? "bg-rose-100 text-rose-800 font-bold"
+                                      ? "bg-white text-red-700 shadow-2xs"
                                       : st === "Investigating"
-                                      ? "bg-amber-100 text-amber-800 font-bold"
-                                      : "bg-emerald-100 text-emerald-800 font-bold"
-                                    : "text-muted hover:text-foreground hover:bg-gray-100"
+                                      ? "bg-white text-amber-700 shadow-2xs"
+                                      : "bg-white text-emerald-700 shadow-2xs"
+                                    : "text-slate-500 hover:text-slate-900"
                                 } disabled:opacity-50`}
                               >
-                                {isUpdating && isCurrent ? <Loader2 className="w-3 h-3 animate-spin inline" /> : st}
+                                {isUpdating && isCurrent ? (
+                                  <Loader2 className="w-3 h-3 animate-spin inline" />
+                                ) : (
+                                  st
+                                )}
                               </button>
                             );
                           })}
                         </div>
                       </td>
 
-                      {/* AI Copilot Ask */}
-                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <td className="px-4 py-2.5 whitespace-nowrap text-right">
                         <Link
                           href={`/assistant?q=Analyze attack event ${event.id} of type ${event.type} from IP ${event.source} and suggest immediate remediation.`}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-primary/5 hover:bg-primary hover:text-white text-primary border border-primary/20 rounded-md transition-all"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
                         >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Ask AI</span>
+                          <span>Investigate</span>
+                          <ArrowUpRight className="w-3 h-3" />
                         </Link>
                       </td>
                     </tr>
@@ -1842,20 +1375,18 @@ export default function OverviewPage() {
           </table>
         </div>
 
-        {/* Table Footer */}
-        <div className="p-4 border-t border-border bg-gray-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted">
+        <div className="px-5 py-3 border-t border-border bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
           <span>
-            Displaying {filteredEvents.length} of {data.recent_events.length} most recent security events
+            Showing {filteredEvents.length} of {recentEvents.length} most recent incidents
           </span>
           <Link
             href="/threats"
-            className="text-primary font-semibold hover:underline flex items-center gap-1 self-start sm:self-auto"
+            className="text-blue-600 hover:text-blue-700 font-medium hover:underline inline-flex items-center gap-1"
           >
-            Go to Dedicated Threats Center <ArrowUpRight className="w-3.5 h-3.5" />
+            Open Threat Detection Console <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
-      </div>
+      </section>
     </div>
-  </div>
-);
+  );
 }
