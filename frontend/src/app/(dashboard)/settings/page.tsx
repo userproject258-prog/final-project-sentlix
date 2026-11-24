@@ -634,7 +634,7 @@ export default function SettingsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: editName.trim() }),
-      });
+      }); 
       if (res.ok) {
         const data = await res.json();
         setUserProfile((prev) => ({ ...prev, name: data.user.name }));
